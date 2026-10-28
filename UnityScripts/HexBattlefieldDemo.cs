@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public enum HexUnitClass { Infantry, HeavyGround, Air }
+public enum HexUnitClass { Infantry, HeavyGround, Air, Naval }
 
 public class HexBattlefieldDemo : MonoBehaviour
 {
@@ -133,13 +133,16 @@ public class HexBattlefieldDemo : MonoBehaviour
     public bool IsTileWalkable(int q, int r, HexUnitClass unitClass)
     {
         if (!tilesByCoordinates.TryGetValue(new Vector2Int(q, r), out TileInfo tile)) return false;
-        return unitClass == HexUnitClass.Air || tile.terrain != "Water";
+        if (unitClass == HexUnitClass.Air) return true;
+        if (unitClass == HexUnitClass.Naval) return tile.terrain == "Water";
+        return tile.terrain != "Water";
     }
 
     public int GetMovementCostAP(int q, int r, HexUnitClass unitClass)
     {
         if (!tilesByCoordinates.TryGetValue(new Vector2Int(q, r), out TileInfo tile)) return int.MaxValue;
         if (unitClass == HexUnitClass.Air) return 10;
+        if (unitClass == HexUnitClass.Naval) return tile.terrain == "Water" ? 10 : int.MaxValue;
         switch (tile.terrain)
         {
             case "Road": return 10;
@@ -163,6 +166,7 @@ public class HexBattlefieldDemo : MonoBehaviour
         if (!tilesByCoordinates.TryGetValue(new Vector2Int(q, r), out TileInfo tile))
             return int.MaxValue;
         if (unitClass == HexUnitClass.Air) return 1;
+        if (unitClass == HexUnitClass.Naval) return tile.terrain == "Water" ? 1 : int.MaxValue;
 
         switch (tile.terrain)
         {
