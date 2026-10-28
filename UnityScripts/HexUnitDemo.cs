@@ -7,9 +7,9 @@ using UnityEngine.InputSystem;
 #endif
 
 /// <summary>
-/// Unit selection, terrain-cost pathfinding, AP scheduling, player actions and simple enemy movement.
-/// Battle AP advances only through the simulation scheduler, never from Time.deltaTime.
-/// Visual waits in enemy animations do not change the simulated AP clock.
+/// Unit selection, terrain-cost movement, optional movement followed by a required non-movement action,
+/// discrete AP scheduling, simple attacks, city capture, and basic enemy AI.
+/// Simulation AP never advances with wall-clock time. WaitForSecondsRealtime is used only for presentation.
 /// </summary>
 public class HexUnitDemo : MonoBehaviour
 {
@@ -17,12 +17,12 @@ public class HexUnitDemo : MonoBehaviour
     public Vector2Int[] blueStartingPositions = { new Vector2Int(1, 1), new Vector2Int(2, 3) };
     public Vector2Int[] redStartingPositions = { new Vector2Int(7, 6), new Vector2Int(7, 7) };
 
-    [Header("Unit Classes (match order of starting positions)")]
+    [Header("Unit Classes (same order as starting positions)")]
     public HexUnitClass[] blueUnitClasses = { HexUnitClass.Infantry, HexUnitClass.HeavyGround };
     public HexUnitClass[] redUnitClasses = { HexUnitClass.Infantry, HexUnitClass.HeavyGround };
 
     [Header("Sprite Resources")]
-    [Tooltip("Path relative to Resources, ending with the down_right folder.")]
+    [Tooltip("Resources path ending with the down_right folder.")]
     public string blueFramesResourcePath = "GadgetSprites/MU_00000/frames/down_right";
     [Tooltip("Empty uses a temporary red placeholder sprite.")]
     public string redFramesResourcePath = "";
@@ -33,19 +33,33 @@ public class HexUnitDemo : MonoBehaviour
     [Min(0.1f)] public float iconScale = 1.6f;
     [Min(0f)] public float liftAboveTile = 0.12f;
     [Min(1f)] public float selectedScaleMultiplier = 1.2f;
-    [Tooltip("Enemy animation display delay only. Does not affect AP.")]
+    [Tooltip("Enemy action display delay only. It never changes simulated AP.")]
     [Min(0f)] public float enemyActionDisplayDelay = 0.25f;
 
-    [Header("AP Rules")]
-    [Tooltip("Movement route AP budget for infantry. Example: six road tiles cost 60 AP.")]
+    [Header("Movement AP Rules")]
     [Min(1)] public int infantryMoveAPBudget = 100;
     [Min(1)] public int heavyMoveAPBudget = 100;
     [Min(1)] public int airMoveAPBudget = 100;
     [Min(1)] public int infantryMaxSteps = 6;
     [Min(1)] public int heavyMaxSteps = 2;
     [Min(1)] public int airMaxSteps = 6;
-    [Min(1)] public int cityOccupationCostAP = 50;
+
+    [Header("Action AP Rules by Unit Class")]
+    [Min(0)] public int infantryAttackAP = 100;
+    [Min(0)] public int heavyAttackAP = 100;
+    [Min(0)] public int airAttackAP = 100;
+    [Min(0)] public int infantryCaptureAP = 50;
+    [Min(0)] public int heavyCaptureAP = 50;
+    [Min(0)] public int airCaptureAP = 50;
     [Min(1)] public int blockedEnemyWaitAP = 25;
+
+    [Header("Combat Rules")]
+    [Min(1)] public int infantryAttackRange = 1;
+    [Min(1)] public int heavyAttackRange = 1;
+    [Min(1)] public int airAttackRange = 2;
+    [Min(1)] public int baseInfantryDamage = 20;
+    [Min(1)] public int baseHeavyDamage = 30;
+    [Min(1)] public int baseAirDamage = 25;
 
     [Header("Simulation UI")]
     public bool showBattleHUD = true;
@@ -70,7 +84,14 @@ public class HexUnitDemo : MonoBehaviour
         public float animationOffset;
         public int lastFrame = -1;
         public float nextReadyTime;
+        public float zeroCostActedAtTime = -1f;
+
+        // Movement is optional and does not finish this activation.
+        public bool hasMovedThisActivation;
+        public int pendingMoveAP;
+
         public int hp = 100;
+        public int maxHp = 100;
         public int attack = 20;
         public int defense = 10;
     }
@@ -92,6 +113,7 @@ public class HexUnitDemo : MonoBehaviour
     private float battleTimeAP;
     private bool simulationRunning;
     private bool moveMode = true;
+    private bool attackMode;
     private string statusMessage = "选择我方单位开始行动。";
 
     private void Start()
@@ -112,8 +134,7 @@ public class HexUnitDemo : MonoBehaviour
 
         SpawnStartingUnits(blueStartingPositions, blueUnitClasses, 0, blue);
         SpawnStartingUnits(redStartingPositions, redUnitClasses, 1, red);
-        statusMessage = "时间暂停在我方操作阶段。选择一支我方单位。";
-        Debug.Log("AP 战场调度启动：模拟时间只在推进时间/敌方行动阶段变化。");
+        statusMessage = "我方操作阶段：移动可选；必须再执行攻击、占领或休整才能结束本次行动。";
     }
 
     private Dictionary<string, Sprite[]> LoadDirectionalFrames(string path, string label, Color32 body, Color32 accent)
@@ -122,21 +143,18 @@ public class HexUnitDemo : MonoBehaviour
         string clean = string.IsNullOrWhiteSpace(path) ? "" : path.Trim().Replace("\\", "/").Trim('/');
         string parent = "";
         Sprite[] fallback = null;
-
         if (!string.IsNullOrEmpty(clean))
         {
             int slash = clean.LastIndexOf('/');
             if (slash >= 0) parent = clean.Substring(0, slash);
             fallback = TryLoadFourFrames(clean);
         }
-
         if (fallback == null)
         {
             Sprite placeholder = CreatePixelUnitSprite(body, accent);
             fallback = new[] { placeholder, placeholder, placeholder, placeholder };
             Debug.LogWarning(label + "动画没有完整加载，暂时使用占位图。");
         }
-
         foreach (string direction in Directions)
         {
             Sprite[] frames = direction == "down_right" || string.IsNullOrEmpty(clean)
@@ -194,7 +212,6 @@ public class HexUnitDemo : MonoBehaviour
             if (unit.renderer == null ||
                 !unit.directionalFrames.TryGetValue(unit.currentDirection, out Sprite[] frames) ||
                 frames == null || frames.Length == 0) continue;
-
             int frame = Mathf.FloorToInt((Time.time + unit.animationOffset) * animationFramesPerSecond) % frames.Length;
             if (frame != unit.lastFrame) { unit.renderer.sprite = frames[frame]; unit.lastFrame = frame; }
         }
@@ -221,22 +238,31 @@ public class HexUnitDemo : MonoBehaviour
     private bool PointerOverHud()
     {
         Vector2 p = GetPointerPosition();
-        // OnGUI uses top-left origin; pointer input uses bottom-left origin.
-        return p.x <= 380f && p.y >= Screen.height - 350f;
+        return p.x <= 390f && p.y >= Screen.height - 440f;
     }
 
     private void HandleMapClick()
     {
         if (mapCamera == null) mapCamera = Camera.main;
         if (mapCamera == null) return;
-
         Ray ray = mapCamera.ScreenPointToRay(GetPointerPosition());
         if (!Physics.Raycast(ray, out RaycastHit hit, 1000f)) return;
         if (!TryReadHexCoordinates(hit.collider.gameObject.name, out int q, out int r)) return;
 
         UnitInfo clickedUnit = FindUnitAt(q, r);
+        if (attackMode && selectedUnit != null && selectedUnit.team == 0 && clickedUnit != null && clickedUnit.team == 1)
+        {
+            ExecutePlayerAttack(clickedUnit);
+            return;
+        }
+
         if (clickedUnit != null)
         {
+            if (selectedUnit != null && selectedUnit.team == 0 && selectedUnit.hasMovedThisActivation && clickedUnit != selectedUnit)
+            {
+                statusMessage = "本单位已经移动。请先对它执行攻击、占领或休整，结束本次行动后再切换单位。";
+                return;
+            }
             SelectUnit(clickedUnit);
             return;
         }
@@ -247,9 +273,15 @@ public class HexUnitDemo : MonoBehaviour
             return;
         }
 
-        if (!moveMode)
+        if (attackMode)
         {
-            statusMessage = "当前未选择移动行动。请在面板中点击“移动”。";
+            statusMessage = "攻击模式：请点击攻击范围内的敌方单位，或取消攻击模式。";
+            return;
+        }
+
+        if (!moveMode || selectedUnit.hasMovedThisActivation)
+        {
+            statusMessage = "移动最多执行一次；现在请执行攻击、占领或休整来结束本次行动。";
             return;
         }
 
@@ -264,15 +296,15 @@ public class HexUnitDemo : MonoBehaviour
 
         List<Vector2Int> path = ReconstructPath(target);
         if (path.Count == 0) return;
-
         int routeCost = currentPaths[target].cost;
-        MoveUnitToPath(selectedUnit, path, false, () =>
-        {
-            selectedUnit.nextReadyTime = battleTimeAP + routeCost;
-            statusMessage = $"移动完成：消耗 {routeCost} AP；该单位将在 AP {selectedUnit.nextReadyTime:0} 恢复。";
-            ClearHighlights();
-            if (!HasReadyBlueUnit()) StartCoroutine(RunSimulationUntilPlayerCanAct());
-        });
+        MoveUnitAlongPath(selectedUnit, path);
+        selectedUnit.pendingMoveAP += routeCost;
+        selectedUnit.hasMovedThisActivation = true;
+        moveMode = false;
+        attackMode = false;
+        ClearHighlights();
+        statusMessage = $"移动完成，暂记 {routeCost} AP。移动没有结束行动；请继续选择攻击、占领或休整。";
+        RefreshMovementHighlights();
     }
 
     private void SpawnStartingUnits(Vector2Int[] positions, HexUnitClass[] classes, int team,
@@ -293,23 +325,24 @@ public class HexUnitDemo : MonoBehaviour
                 continue;
             }
 
-            HexUnitClass unitClass = classes != null && i < classes.Length ? classes[i] : HexUnitClass.Infantry;
+            HexUnitClass type = classes != null && i < classes.Length ? classes[i] : HexUnitClass.Infantry;
             GameObject icon = new GameObject(team == 0 ? "BlueUnitIcon" : "RedUnitIcon");
             icon.transform.SetParent(transform, false);
             icon.transform.localPosition = HexToLocalPosition(q, r);
             icon.transform.localScale = Vector3.one * iconScale;
-
             SpriteRenderer sr = icon.AddComponent<SpriteRenderer>();
+
+            int hp = type == HexUnitClass.HeavyGround ? 140 : type == HexUnitClass.Air ? 80 : 100;
+            int atk = type == HexUnitClass.HeavyGround ? baseHeavyDamage : type == HexUnitClass.Air ? baseAirDamage : baseInfantryDamage;
+            int def = type == HexUnitClass.HeavyGround ? 20 : type == HexUnitClass.Air ? 5 : 10;
             var unit = new UnitInfo
             {
-                q = q, r = r, team = team, unitClass = unitClass,
+                q = q, r = r, team = team, unitClass = type,
                 visual = icon.transform, renderer = sr, directionalFrames = animations,
                 currentDirection = "down_right", baseScale = Vector3.one * iconScale,
                 animationOffset = (q * 3 + r * 7 + team * 5) * 0.037f,
-                nextReadyTime = 0f,
-                hp = unitClass == HexUnitClass.HeavyGround ? 140 : unitClass == HexUnitClass.Air ? 80 : 100,
-                attack = unitClass == HexUnitClass.HeavyGround ? 30 : unitClass == HexUnitClass.Air ? 25 : 20,
-                defense = unitClass == HexUnitClass.HeavyGround ? 20 : 10
+                nextReadyTime = 0f, zeroCostActedAtTime = -1f,
+                hp = hp, maxHp = hp, attack = atk, defense = def
             };
             sr.sprite = animations["down_right"][0];
             sr.sortingOrder = 10;
@@ -333,11 +366,18 @@ public class HexUnitDemo : MonoBehaviour
         if (unit.visual != null)
             unit.visual.localScale = unit.baseScale * selectedScaleMultiplier;
 
-        moveMode = unit.team == 0 && IsUnitReady(unit) && !simulationRunning;
+        moveMode = unit.team == 0 && IsUnitReady(unit) && !unit.hasMovedThisActivation && !simulationRunning;
+        attackMode = false;
         RefreshMovementHighlights();
-        statusMessage = unit.team == 0
-            ? (IsUnitReady(unit) ? "我方单位已就绪，可选择行动。" : $"该单位恢复中，还需 {Mathf.CeilToInt(unit.nextReadyTime - battleTimeAP)} AP。")
-            : "敌方单位：仅查看属性，不能直接下达命令。";
+
+        if (unit.team != 0)
+            statusMessage = "敌方单位属性（只读）。我方不能直接控制敌方行动。";
+        else if (!IsUnitReady(unit))
+            statusMessage = $"该单位恢复中，还需 {Mathf.CeilToInt(unit.nextReadyTime - battleTimeAP)} AP。";
+        else if (unit.hasMovedThisActivation)
+            statusMessage = "该单位已移动；请执行攻击、占领或休整来结束本次行动。";
+        else
+            statusMessage = "我方操作阶段：移动可选；非移动行动负责结束本次行动。";
     }
 
     private void ClearHighlights()
@@ -352,7 +392,8 @@ public class HexUnitDemo : MonoBehaviour
         reachableTiles.Clear();
         currentPaths.Clear();
 
-        if (selectedUnit == null || selectedUnit.team != 0 || !IsUnitReady(selectedUnit) || simulationRunning)
+        if (selectedUnit == null || selectedUnit.team != 0 || !IsUnitReady(selectedUnit) ||
+            selectedUnit.hasMovedThisActivation || simulationRunning || !moveMode || attackMode)
         {
             battlefield.SetMovementHighlights(null);
             return;
@@ -369,35 +410,31 @@ public class HexUnitDemo : MonoBehaviour
             int bestIndex = 0;
             for (int i = 1; i < open.Count; i++)
                 if (currentPaths[open[i]].cost < currentPaths[open[bestIndex]].cost) bestIndex = i;
-
             Vector2Int current = open[bestIndex];
             open.RemoveAt(bestIndex);
-            PathNode currentNode = currentPaths[current];
+            PathNode node = currentPaths[current];
 
             foreach (Vector2Int delta in Neighbors)
             {
                 Vector2Int next = current + delta;
                 if (!battlefield.IsInsideMap(next.x, next.y) ||
                     !battlefield.IsTileWalkable(next.x, next.y, selectedUnit.unitClass)) continue;
-
                 UnitInfo occupant = FindUnitAt(next.x, next.y);
                 if (occupant != null && occupant != selectedUnit) continue;
 
                 int stepCost = battlefield.GetMovementCostAP(next.x, next.y, selectedUnit.unitClass);
-                int nextCost = currentNode.cost + stepCost;
-                int nextSteps = currentNode.steps + 1;
-                if (nextSteps > maxSteps || nextCost > apBudget) continue;
+                int cost = node.cost + stepCost;
+                int steps = node.steps + 1;
+                if (steps > maxSteps || cost > apBudget) continue;
+                if (currentPaths.TryGetValue(next, out PathNode old) && old.cost <= cost && old.steps <= steps) continue;
 
-                if (currentPaths.TryGetValue(next, out PathNode old) && old.cost <= nextCost) continue;
-
-                currentPaths[next] = new PathNode { cost = nextCost, steps = nextSteps, previous = current };
+                currentPaths[next] = new PathNode { cost = cost, steps = steps, previous = current };
                 if (!open.Contains(next)) open.Add(next);
             }
         }
 
         foreach (KeyValuePair<Vector2Int, PathNode> pair in currentPaths)
             if (pair.Key != start) reachableTiles.Add(pair.Key);
-
         battlefield.SetMovementHighlights(reachableTiles);
     }
 
@@ -405,11 +442,10 @@ public class HexUnitDemo : MonoBehaviour
     {
         var path = new List<Vector2Int>();
         if (!currentPaths.ContainsKey(destination)) return path;
-
         Vector2Int cursor = destination;
         Vector2Int start = new Vector2Int(selectedUnit.q, selectedUnit.r);
-        int safety = 0;
-        while (cursor != start && safety++ < columnsForSafety())
+        int guard = 0;
+        while (cursor != start && guard++ < battlefield.columns * battlefield.rows + 1)
         {
             path.Add(cursor);
             if (!currentPaths.TryGetValue(cursor, out PathNode node)) return new List<Vector2Int>();
@@ -420,34 +456,73 @@ public class HexUnitDemo : MonoBehaviour
         return path;
     }
 
-    private int columnsForSafety() => Mathf.Max(1, battlefield.columns * battlefield.rows + 1);
-    private int GetAPBudget(HexUnitClass type) => type == HexUnitClass.Air ? airMoveAPBudget : type == HexUnitClass.HeavyGround ? heavyMoveAPBudget : infantryMoveAPBudget;
-    private int GetMaxSteps(HexUnitClass type) => type == HexUnitClass.Air ? airMaxSteps : type == HexUnitClass.HeavyGround ? heavyMaxSteps : infantryMaxSteps;
-
-    private void MoveUnitToPath(UnitInfo unit, List<Vector2Int> path, bool enemy, System.Action onComplete)
+    private void MoveUnitAlongPath(UnitInfo unit, List<Vector2Int> path)
     {
-        StartCoroutine(MovePathRoutine(unit, path, enemy, onComplete));
-    }
-
-    private IEnumerator MovePathRoutine(UnitInfo unit, List<Vector2Int> path, bool enemy, System.Action onComplete)
-    {
-        if (enemy) statusMessage = $"敌方{ClassName(unit.unitClass)}正在移动……";
         foreach (Vector2Int point in path)
         {
-            int dq = point.x - unit.q, dr = point.y - unit.r;
-            unit.currentDirection = GetDirectionForMove(dq, dr);
-            unit.q = point.x; unit.r = point.y;
+            unit.currentDirection = GetDirectionForMove(point.x - unit.q, point.y - unit.r);
+            unit.q = point.x;
+            unit.r = point.y;
             unit.visual.localPosition = HexToLocalPosition(unit.q, unit.r);
             unit.lastFrame = -1;
-            if (enemy && enemyActionDisplayDelay > 0f)
-                yield return new WaitForSecondsRealtime(enemyActionDisplayDelay);
         }
-        onComplete?.Invoke();
+    }
+
+    private int GetAPBudget(HexUnitClass type) => type == HexUnitClass.Air ? airMoveAPBudget : type == HexUnitClass.HeavyGround ? heavyMoveAPBudget : infantryMoveAPBudget;
+    private int GetMaxSteps(HexUnitClass type) => type == HexUnitClass.Air ? airMaxSteps : type == HexUnitClass.HeavyGround ? heavyMaxSteps : infantryMaxSteps;
+    private int GetAttackAP(HexUnitClass type) => type == HexUnitClass.Air ? airAttackAP : type == HexUnitClass.HeavyGround ? heavyAttackAP : infantryAttackAP;
+    private int GetCaptureAP(HexUnitClass type) => type == HexUnitClass.Air ? airCaptureAP : type == HexUnitClass.HeavyGround ? heavyCaptureAP : infantryCaptureAP;
+    private int GetAttackRange(HexUnitClass type) => type == HexUnitClass.Air ? airAttackRange : type == HexUnitClass.HeavyGround ? heavyAttackRange : infantryAttackRange;
+
+    private bool IsUnitReady(UnitInfo unit)
+    {
+        if (unit == null || unit.nextReadyTime > battleTimeAP + 0.001f) return false;
+        // A zero-AP action still consumes this unit's current activation, without inventing AP cost.
+        return Mathf.Abs(unit.zeroCostActedAtTime - battleTimeAP) > 0.001f;
+    }
+
+    private void BeginAttackMode()
+    {
+        if (selectedUnit == null || selectedUnit.team != 0 || !IsUnitReady(selectedUnit)) return;
+        moveMode = false;
+        attackMode = true;
+        ClearHighlights();
+        statusMessage = $"攻击模式：攻击范围 {GetAttackRange(selectedUnit.unitClass)} 格。点击范围内敌军。";
+    }
+
+    private void ExecutePlayerAttack(UnitInfo target)
+    {
+        if (selectedUnit == null || selectedUnit.team != 0 || !IsUnitReady(selectedUnit)) return;
+        int distance = HexDistance(new Vector2Int(selectedUnit.q, selectedUnit.r), new Vector2Int(target.q, target.r));
+        if (distance > GetAttackRange(selectedUnit.unitClass))
+        {
+            statusMessage = $"目标超出攻击范围（当前距离 {distance} 格）。";
+            return;
+        }
+
+        int terrainDefense = battlefield.GetDefenseBonus(target.q, target.r);
+        int damage = Mathf.Max(1, selectedUnit.attack - target.defense - terrainDefense);
+        target.hp -= damage;
+        int actionCost = GetAttackAP(selectedUnit.unitClass);
+        statusMessage = $"攻击命中，造成 {damage} 伤害；本次攻击消耗 {actionCost} AP。";
+        if (target.hp <= 0)
+        {
+            units.Remove(target);
+            if (target.visual != null) Destroy(target.visual.gameObject);
+            statusMessage += " 敌方单位被击破。";
+        }
+
+        FinishPlayerActivation(actionCost);
     }
 
     private void OccupyCity()
     {
         if (selectedUnit == null || selectedUnit.team != 0 || !IsUnitReady(selectedUnit)) return;
+        if (selectedUnit.unitClass == HexUnitClass.Air)
+        {
+            statusMessage = "空军单位不能执行城市占领。";
+            return;
+        }
         if (!battlefield.IsCity(selectedUnit.q, selectedUnit.r))
         {
             statusMessage = "当前地块不是城市，无法执行占领。";
@@ -459,12 +534,41 @@ public class HexUnitDemo : MonoBehaviour
             return;
         }
 
-        int q = selectedUnit.q, r = selectedUnit.r;
-        battlefield.CaptureCity(q, r, 0);
-        selectedUnit.nextReadyTime = battleTimeAP + cityOccupationCostAP;
-        statusMessage = $"占领完成：城市已变为我方城市，消耗 {cityOccupationCostAP} AP。";
-        RefreshMovementHighlights();
-        if (!HasReadyBlueUnit()) StartCoroutine(RunSimulationUntilPlayerCanAct());
+        battlefield.CaptureCity(selectedUnit.q, selectedUnit.r, 0);
+        int cost = GetCaptureAP(selectedUnit.unitClass);
+        statusMessage = $"占领完成：城市归属已变为我方，行动消耗 {cost} AP。";
+        FinishPlayerActivation(cost);
+    }
+
+    private void Rest()
+    {
+        if (selectedUnit == null || selectedUnit.team != 0 || !IsUnitReady(selectedUnit)) return;
+        statusMessage = "休整完成：没有额外效果，行动本身消耗 0 AP。";
+        FinishPlayerActivation(0);
+    }
+
+    private void FinishPlayerActivation(int actionCost)
+    {
+        if (selectedUnit == null) return;
+        UnitInfo acted = selectedUnit;
+        int totalCost = acted.pendingMoveAP + actionCost;
+
+        if (totalCost == 0)
+            acted.zeroCostActedAtTime = battleTimeAP;
+        else
+            acted.zeroCostActedAtTime = -1f;
+
+        acted.nextReadyTime = battleTimeAP + totalCost;
+        acted.pendingMoveAP = 0;
+        acted.hasMovedThisActivation = false;
+        selectedUnit = null;
+        moveMode = false;
+        attackMode = false;
+        ClearHighlights();
+
+        statusMessage = $"本次行动结束：移动与行动合计消耗 {totalCost} AP；下次可行动时间为 AP {acted.nextReadyTime:0}。";
+        if (!HasReadyBlueUnit())
+            StartCoroutine(RunSimulationUntilPlayerCanAct());
     }
 
     private IEnumerator RunSimulationUntilPlayerCanAct()
@@ -472,25 +576,20 @@ public class HexUnitDemo : MonoBehaviour
         if (simulationRunning) yield break;
         simulationRunning = true;
         moveMode = false;
+        attackMode = false;
         ClearHighlights();
-        statusMessage = "敌方正在计算并执行行动……";
+        statusMessage = "敌方正在计算行动顺序……";
 
         int safety = 0;
         while (!HasReadyBlueUnit() && safety++ < 300)
         {
             UnitInfo readyEnemy = null;
             foreach (UnitInfo unit in units)
-            {
-                if (unit.team == 1 && unit.nextReadyTime <= battleTimeAP + 0.001f)
-                {
-                    readyEnemy = unit;
-                    break;
-                }
-            }
+                if (unit.team == 1 && IsUnitReady(unit)) { readyEnemy = unit; break; }
 
             if (readyEnemy != null)
             {
-                yield return StartCoroutine(PerformEnemyAction(readyEnemy));
+                yield return StartCoroutine(PerformEnemyActivation(readyEnemy));
                 continue;
             }
 
@@ -501,37 +600,25 @@ public class HexUnitDemo : MonoBehaviour
 
             if (float.IsInfinity(nextTime))
             {
-                statusMessage = "没有待执行的行动事件。";
+                statusMessage = "没有未来 AP 事件。请检查是否所有单位都执行了零 AP 休整。";
                 break;
             }
 
-            // Discrete simulation-time jump: no relationship to real elapsed seconds.
+            // Discrete event jump: never based on Time.deltaTime.
             battleTimeAP = nextTime;
         }
 
-        if (safety >= 300)
-            Debug.LogWarning("Simulation safety limit reached; check unit scheduling rules.");
-
+        if (safety >= 300) Debug.LogWarning("Simulation safety limit reached.");
         simulationRunning = false;
-        if (selectedUnit != null && selectedUnit.team == 0 && IsUnitReady(selectedUnit))
-        {
-            moveMode = true;
-            RefreshMovementHighlights();
-        }
-        else if (selectedUnit != null)
-        {
-            RefreshMovementHighlights();
-        }
-
+        selectedUnit = null;
         statusMessage = HasReadyBlueUnit()
-            ? "时间已推进。现在轮到可行动的我方单位。"
-            : "当前没有可行动的我方单位；可以再次推进时间。";
+            ? "战场时间已推进；现在有我方单位可以行动。"
+            : statusMessage;
     }
 
-    private IEnumerator PerformEnemyAction(UnitInfo enemy)
+    private IEnumerator PerformEnemyActivation(UnitInfo enemy)
     {
         if (enemy == null) yield break;
-
         UnitInfo target = FindNearestBlue(enemy.q, enemy.r);
         if (target == null)
         {
@@ -539,45 +626,84 @@ public class HexUnitDemo : MonoBehaviour
             yield break;
         }
 
-        // Capture if already standing on an unowned city.
-        if (battlefield.IsCity(enemy.q, enemy.r) && battlefield.GetCityOwner(enemy.q, enemy.r) != 1)
-        {
-            battlefield.CaptureCity(enemy.q, enemy.r, 1);
-            enemy.nextReadyTime = battleTimeAP + cityOccupationCostAP;
-            statusMessage = "敌方占领了一座城市。";
-            if (enemyActionDisplayDelay > 0f) yield return new WaitForSecondsRealtime(enemyActionDisplayDelay);
-            yield break;
-        }
-
+        int moveCost = 0;
         Dictionary<Vector2Int, PathNode> paths = CalculatePaths(enemy);
-        Vector2Int best = new Vector2Int(enemy.q, enemy.r);
-        int currentDistance = HexDistance(best, new Vector2Int(target.q, target.r));
-        int bestDistance = currentDistance;
-        int bestCost = 0;
+        Vector2Int start = new Vector2Int(enemy.q, enemy.r);
+        Vector2Int destination = start;
+        int bestDistance = HexDistance(start, new Vector2Int(target.q, target.r));
+        int bestCost = int.MaxValue;
 
         foreach (KeyValuePair<Vector2Int, PathNode> pair in paths)
         {
-            if (pair.Key == best) continue;
+            if (pair.Key == start) continue;
             int distance = HexDistance(pair.Key, new Vector2Int(target.q, target.r));
-            if (distance < bestDistance || (distance == bestDistance && distance < currentDistance && pair.Value.cost < bestCost))
+            if (distance < bestDistance || (distance == bestDistance && pair.Value.cost < bestCost))
             {
-                best = pair.Key; bestDistance = distance; bestCost = pair.Value.cost;
+                bestDistance = distance;
+                bestCost = pair.Value.cost;
+                destination = pair.Key;
             }
         }
 
-        if (best == new Vector2Int(enemy.q, enemy.r) || bestDistance >= currentDistance)
+        if (destination != start && bestDistance < HexDistance(start, new Vector2Int(target.q, target.r)))
         {
-            enemy.nextReadyTime = battleTimeAP + blockedEnemyWaitAP;
-            statusMessage = $"敌方{ClassName(enemy.unitClass)}保持位置，等待下一次行动。";
-            if (enemyActionDisplayDelay > 0f) yield return new WaitForSecondsRealtime(enemyActionDisplayDelay);
-            yield break;
+            List<Vector2Int> path = ReconstructPathFrom(paths, start, destination);
+            moveCost = paths[destination].cost;
+            statusMessage = $"敌方{ClassName(enemy.unitClass)}移动……";
+            foreach (Vector2Int point in path)
+            {
+                enemy.currentDirection = GetDirectionForMove(point.x - enemy.q, point.y - enemy.r);
+                enemy.q = point.x;
+                enemy.r = point.y;
+                enemy.visual.localPosition = HexToLocalPosition(enemy.q, enemy.r);
+                enemy.lastFrame = -1;
+                if (enemyActionDisplayDelay > 0f)
+                    yield return new WaitForSecondsRealtime(enemyActionDisplayDelay);
+            }
         }
 
-        List<Vector2Int> path = ReconstructPathFrom(paths, new Vector2Int(enemy.q, enemy.r), best);
-        int cost = paths[best].cost;
-        enemy.nextReadyTime = battleTimeAP + cost;
-        yield return StartCoroutine(MovePathRoutine(enemy, path, true, null));
-        statusMessage = $"敌方单位移动至 ({enemy.q}, {enemy.r})，消耗 {cost} AP。";
+        target = FindNearestBlue(enemy.q, enemy.r);
+        int actionCost = 0;
+        if (target != null &&
+            HexDistance(new Vector2Int(enemy.q, enemy.r), new Vector2Int(target.q, target.r)) <= GetAttackRange(enemy.unitClass))
+        {
+            int damage = Mathf.Max(1, enemy.attack - target.defense - battlefield.GetDefenseBonus(target.q, target.r));
+            target.hp -= damage;
+            actionCost = GetAttackAP(enemy.unitClass);
+            statusMessage = $"敌方攻击我方单位，造成 {damage} 伤害。";
+            if (target.hp <= 0)
+            {
+                units.Remove(target);
+                if (target.visual != null) Destroy(target.visual.gameObject);
+                statusMessage += " 我方单位被击破。";
+            }
+            if (enemyActionDisplayDelay > 0f)
+                yield return new WaitForSecondsRealtime(enemyActionDisplayDelay);
+        }
+        else if (battlefield.IsCity(enemy.q, enemy.r) && battlefield.GetCityOwner(enemy.q, enemy.r) != 1 && enemy.unitClass != HexUnitClass.Air)
+        {
+            battlefield.CaptureCity(enemy.q, enemy.r, 1);
+            actionCost = GetCaptureAP(enemy.unitClass);
+            statusMessage = $"敌方占领城市，消耗 {actionCost} AP。";
+            if (enemyActionDisplayDelay > 0f)
+                yield return new WaitForSecondsRealtime(enemyActionDisplayDelay);
+        }
+        else if (moveCost == 0)
+        {
+            actionCost = blockedEnemyWaitAP;
+            statusMessage = $"敌方{ClassName(enemy.unitClass)}未找到有效行动，等待 {blockedEnemyWaitAP} AP。";
+        }
+        else
+        {
+            // Enemy movement also has a non-movement end action: a no-effect rest costing zero AP.
+            actionCost = 0;
+            statusMessage = $"敌方移动结束并休整（休整 0 AP）；移动成本为 {moveCost} AP。";
+        }
+
+        int totalCost = moveCost + actionCost;
+        enemy.nextReadyTime = battleTimeAP + totalCost;
+        if (totalCost == 0) enemy.zeroCostActedAtTime = battleTimeAP;
+        else enemy.zeroCostActedAtTime = -1f;
     }
 
     private Dictionary<Vector2Int, PathNode> CalculatePaths(UnitInfo unit)
@@ -587,12 +713,14 @@ public class HexUnitDemo : MonoBehaviour
         Vector2Int start = new Vector2Int(unit.q, unit.r);
         paths[start] = new PathNode { cost = 0, steps = 0, previous = start };
         open.Add(start);
+
         while (open.Count > 0)
         {
             int bi = 0;
             for (int i = 1; i < open.Count; i++)
                 if (paths[open[i]].cost < paths[open[bi]].cost) bi = i;
-            Vector2Int current = open[bi]; open.RemoveAt(bi);
+            Vector2Int current = open[bi];
+            open.RemoveAt(bi);
             PathNode node = paths[current];
 
             foreach (Vector2Int delta in Neighbors)
@@ -602,10 +730,11 @@ public class HexUnitDemo : MonoBehaviour
                     !battlefield.IsTileWalkable(next.x, next.y, unit.unitClass)) continue;
                 UnitInfo occupied = FindUnitAt(next.x, next.y);
                 if (occupied != null && occupied != unit) continue;
+
                 int cost = node.cost + battlefield.GetMovementCostAP(next.x, next.y, unit.unitClass);
                 int steps = node.steps + 1;
                 if (steps > GetMaxSteps(unit.unitClass) || cost > GetAPBudget(unit.unitClass)) continue;
-                if (paths.TryGetValue(next, out PathNode old) && old.cost <= cost) continue;
+                if (paths.TryGetValue(next, out PathNode old) && old.cost <= cost && old.steps <= steps) continue;
                 paths[next] = new PathNode { cost = cost, steps = steps, previous = current };
                 if (!open.Contains(next)) open.Add(next);
             }
@@ -651,12 +780,9 @@ public class HexUnitDemo : MonoBehaviour
     private bool HasReadyBlueUnit()
     {
         foreach (UnitInfo unit in units)
-            if (unit.team == 0 && unit.nextReadyTime <= battleTimeAP + 0.001f)
-                return true;
+            if (unit.team == 0 && IsUnitReady(unit)) return true;
         return false;
     }
-
-    private bool IsUnitReady(UnitInfo unit) => unit != null && unit.nextReadyTime <= battleTimeAP + 0.001f;
 
     private UnitInfo FindUnitAt(int q, int r)
     {
@@ -697,10 +823,10 @@ public class HexUnitDemo : MonoBehaviour
     private void OnGUI()
     {
         if (!showBattleHUD) return;
-        GUILayout.BeginArea(new Rect(12f, 12f, 360f, 330f), GUI.skin.box);
+        GUILayout.BeginArea(new Rect(12f, 12f, 375f, 430f), GUI.skin.box);
         GUILayout.Label($"战场 AP：{battleTimeAP:0}");
-        GUILayout.Label(simulationRunning ? "阶段：敌方行动（模拟时间跳转）" : "阶段：我方操作（时间暂停）");
-        GUILayout.Space(4);
+        GUILayout.Label(simulationRunning ? "阶段：敌方行动（模拟时间离散推进）" : "阶段：我方操作（模拟时间暂停）");
+
         if (selectedUnit == null)
         {
             GUILayout.Label("未选择单位。点击我方单位查看属性和行动。");
@@ -713,27 +839,48 @@ public class HexUnitDemo : MonoBehaviour
             GUILayout.Label($"坐标：({selectedUnit.q}, {selectedUnit.r})");
             battlefield.TryGetTerrain(selectedUnit.q, selectedUnit.r, out string terrain);
             GUILayout.Label($"地形：{terrain}　防御地形加成：+{battlefield.GetDefenseBonus(selectedUnit.q, selectedUnit.r)}");
-            GUILayout.Label($"HP：{selectedUnit.hp}　攻击：{selectedUnit.attack}　防御：{selectedUnit.defense}");
+            GUILayout.Label($"HP：{selectedUnit.hp}/{selectedUnit.maxHp}　攻击：{selectedUnit.attack}　防御：{selectedUnit.defense}");
             GUILayout.Label(IsUnitReady(selectedUnit) ? "行动状态：就绪" :
                 $"行动状态：恢复中，剩余 {Mathf.CeilToInt(selectedUnit.nextReadyTime - battleTimeAP)} AP");
-
             if (selectedUnit.team == 0 && !simulationRunning)
             {
-                GUI.enabled = IsUnitReady(selectedUnit);
-                if (GUILayout.Button(moveMode ? "移动（已选中）" : "移动"))
+                bool ready = IsUnitReady(selectedUnit);
+                GUI.enabled = ready && !selectedUnit.hasMovedThisActivation && !attackMode;
+                if (GUILayout.Button("移动（可选；不结束行动）"))
                 {
                     moveMode = true;
+                    attackMode = false;
                     RefreshMovementHighlights();
-                    statusMessage = "点击青色地块移动；路线按地形累计 AP。";
+                    statusMessage = "点击青色地块移动。移动后仍需执行一个非移动行动。";
                 }
 
-                bool canOccupy = IsUnitReady(selectedUnit) &&
+                GUI.enabled = ready && !attackMode;
+                if (GUILayout.Button($"攻击（{GetAttackAP(selectedUnit.unitClass)} AP；范围 {GetAttackRange(selectedUnit.unitClass)}）"))
+                    BeginAttackMode();
+
+                GUI.enabled = ready && !attackMode &&
                     battlefield.IsCity(selectedUnit.q, selectedUnit.r) &&
-                    battlefield.GetCityOwner(selectedUnit.q, selectedUnit.r) != 0;
-                GUI.enabled = canOccupy;
-                if (GUILayout.Button($"占领城市（{cityOccupationCostAP} AP）"))
+                    battlefield.GetCityOwner(selectedUnit.q, selectedUnit.r) != 0 &&
+                    selectedUnit.unitClass != HexUnitClass.Air;
+                if (GUILayout.Button($"占领城市（{GetCaptureAP(selectedUnit.unitClass)} AP）"))
                     OccupyCity();
+
+                GUI.enabled = ready;
+                if (GUILayout.Button("休整（0 AP；结束本次行动）"))
+                    Rest();
+
+                if (attackMode && GUILayout.Button("取消攻击"))
+                {
+                    attackMode = false;
+                    moveMode = selectedUnit != null && !selectedUnit.hasMovedThisActivation;
+                    RefreshMovementHighlights();
+                    statusMessage = "已取消攻击模式。";
+                }
                 GUI.enabled = true;
+
+                GUILayout.Label(selectedUnit.hasMovedThisActivation
+                    ? $"本次已移动，暂记移动成本 {selectedUnit.pendingMoveAP} AP。必须再执行非移动行动。"
+                    : "移动是可选操作；攻击、占领或休整会结束本次行动。");
             }
         }
 
