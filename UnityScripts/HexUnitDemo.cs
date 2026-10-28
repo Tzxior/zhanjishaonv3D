@@ -677,7 +677,6 @@ public class HexUnitDemo : MonoBehaviour
         if(distance>selectedUnit.attackRange) { statusMessage=$"目标超出攻击范围（当前距离 {distance} 格）。"; return; }
         if(selectedAttackNavalOnly && target.unitClass!=HexUnitClass.Naval) { statusMessage="该行动只能攻击海军单位。"; return; }
         if(selectedAttackAirOnly && target.unitClass!=HexUnitClass.Air) { statusMessage="该行动只能攻击空军单位。"; return; }
-        if(target.unitId=="sub" && selectedUnit.unitId!="destroyer" && selectedUnit.unitId!="cruiser") { statusMessage="潜航单位目前仅允许驱逐舰或巡洋舰攻击命中。"; return; }
         if(selectedUnit.ammoCapacity>0 && selectedUnit.currentAmmo<=0) { statusMessage="弹药不足。"; return; }
         int terrainDefense=battlefield.GetDefenseBonus(target.q,target.r);
         int rawDamage=Mathf.RoundToInt(selectedUnit.attack*selectedAttackMultiplier);
@@ -1063,6 +1062,7 @@ public class HexUnitDemo : MonoBehaviour
                 if(GUILayout.Button($"休整（{selectedUnit.restAP} AP；结束行动）"))Rest();
                 if(selectedUnit.unitId=="fortress" && GUILayout.Button(selectedUnit.fortressGarrisoned?"要塞切换机动形态（0 AP）":"要塞切换驻守形态（0 AP）"))
                 { selectedUnit.fortressGarrisoned=!selectedUnit.fortressGarrisoned; statusMessage=selectedUnit.fortressGarrisoned?"要塞已进入驻守形态，可攻击。":"要塞已进入机动形态，无法攻击。"; FinishPlayerActivation(0); }
+                GUI.enabled=ready;
                 if(attackMode&&GUILayout.Button("取消攻击"))
                 {attackMode=false;moveMode=selectedUnit!=null&&!selectedUnit.hasMovedThisActivation;RefreshMovementHighlights();statusMessage="已取消攻击模式。";}
                 GUI.enabled=true;
