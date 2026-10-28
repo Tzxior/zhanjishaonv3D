@@ -23,7 +23,14 @@ public class HexUnitDemo : MonoBehaviour
     {
         public string id = "infantry";
         public string unitName = "步兵";
+        // Data category (five-way UI/design grouping) is separate from unitClass (movement/terrain rules).
+        public string unitCategory = "infantry";
         public HexUnitClass unitClass = HexUnitClass.Infantry;
+        [Min(0)] public int ammoCapacity = 0;
+        [Min(0)] public int fuelCapacity = 0;
+        [TextArea(2, 4)] public string description = "";
+        // Stable identifiers for unit abilities; individual effects are implemented in later gameplay steps.
+        public string[] specialAbilities = new string[0];
         [Min(1)] public int maxHP=100;
         [Min(0)] public int attackPower=20;
         public HexAttackType attackType=HexAttackType.Bullet;
@@ -38,7 +45,7 @@ public class HexUnitDemo : MonoBehaviour
         public bool canCapture=false;
     }
     [Header("Individual Unit Profiles (array order matches starting positions)")]
-    [Tooltip("每个部署单位独立配置，增加条目即可继续制作原作的15个主要单位。")]
+    [Tooltip("每个部署单位独立配置；单位详细资料优先从 GadgetUnitProfiles.json 读取。")]
     public UnitBattleProfile[] blueUnitProfiles =
     {
         new UnitBattleProfile { unitName="步兵", unitClass=HexUnitClass.Infantry, maxHP=100, attackPower=20, attackType=HexAttackType.Bullet, bulletDefense=10, explosionDefense=8, movementPower=6, movementAPLimit=100, attackAP=100, captureAP=50, restAP=0, attackRange=1 },
@@ -104,6 +111,10 @@ public class HexUnitDemo : MonoBehaviour
         public int pendingMoveAP;
 
         public string unitName;
+        public string unitCategory = "infantry";
+        public int ammoCapacity, fuelCapacity;
+        public string description;
+        public string[] specialAbilities;
         public HexAttackType attackType;
         public int hp=100, maxHp=100, attack=20;
         public int bulletDefense=10, explosionDefense=8;
@@ -378,6 +389,9 @@ public class HexUnitDemo : MonoBehaviour
                 currentDirection="down_right",baseScale=Vector3.one*iconScale,animationOffset=(q*3+r*7+team*5)*0.037f,
                 nextReadyTime=0f,zeroCostActedAtTime=-1f,
                 unitName=string.IsNullOrWhiteSpace(p.unitName)?"未命名单位":p.unitName,
+                unitCategory=string.IsNullOrWhiteSpace(p.unitCategory)?"infantry":p.unitCategory,
+                ammoCapacity=Mathf.Max(0,p.ammoCapacity),fuelCapacity=Mathf.Max(0,p.fuelCapacity),
+                description=p.description,specialAbilities=p.specialAbilities,
                 hp=Mathf.Max(1,p.maxHP),maxHp=Mathf.Max(1,p.maxHP),attack=Mathf.Max(0,p.attackPower),attackType=p.attackType,
                 bulletDefense=Mathf.Max(0,p.bulletDefense),explosionDefense=Mathf.Max(0,p.explosionDefense),
                 movementPower=Mathf.Max(1,p.movementPower),movementAPLimit=Mathf.Max(1,p.movementAPLimit),
@@ -851,6 +865,18 @@ public class HexUnitDemo : MonoBehaviour
         }
     }
 
+    private string CategoryName(string category)
+    {
+        switch(category)
+        {
+            case "ground_vehicle": return "地面车辆";
+            case "artillery": return "炮兵";
+            case "air": return "空军";
+            case "naval": return "海军";
+            default: return "步兵";
+        }
+    }
+
     private void OnGUI()
     {
         if(!showBattleHUD)return;
@@ -860,8 +886,11 @@ public class HexUnitDemo : MonoBehaviour
         if(selectedUnit!=null)
         {
             GUILayout.Label(selectedUnit.team==0?"我方单位属性":"敌方单位属性（只读）");
-            GUILayout.Label($"单位：{selectedUnit.unitName}　兵种：{ClassName(selectedUnit.unitClass)}");
+            GUILayout.Label($"单位：{selectedUnit.unitName}　分类：{CategoryName(selectedUnit.unitCategory)}");
             GUILayout.Label($"阵营：{(selectedUnit.team==0?"我方":"敌方")}　坐标：({selectedUnit.q},{selectedUnit.r})");
+            GUILayout.Label($"弹药容量：{selectedUnit.ammoCapacity}　燃料容量：{selectedUnit.fuelCapacity}");
+            if(!string.IsNullOrWhiteSpace(selectedUnit.description))
+                GUILayout.Label($"定位：{selectedUnit.description}");
             GUILayout.Label($"生命：{selectedUnit.hp}/{selectedUnit.maxHp}（{100f*selectedUnit.hp/Mathf.Max(1,selectedUnit.maxHp):0}%）");
             GUILayout.Label($"攻击力：{selectedUnit.attack}　攻击类型：{AttackTypeName(selectedUnit.attackType)}　范围：{selectedUnit.attackRange}");
             GUILayout.Label($"子弹防御：{selectedUnit.bulletDefense}　爆炸防御：{selectedUnit.explosionDefense}");
