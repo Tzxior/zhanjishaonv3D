@@ -21,6 +21,7 @@ public class HexUnitDemo : MonoBehaviour
 
     [System.Serializable] public class UnitBattleProfile
     {
+        public string id = "infantry";
         public string unitName = "步兵";
         public HexUnitClass unitClass = HexUnitClass.Infantry;
         [Min(1)] public int maxHP=100;
@@ -44,9 +45,15 @@ public class HexUnitDemo : MonoBehaviour
     };
     public UnitBattleProfile[] redUnitProfiles =
     {
-        new UnitBattleProfile { unitName="敌方步兵", unitClass=HexUnitClass.Infantry, maxHP=100, attackPower=20, attackType=HexAttackType.Bullet, bulletDefense=10, explosionDefense=8, movementPower=6, movementAPLimit=100, attackAP=100, captureAP=50, restAP=0, attackRange=1 },
-        new UnitBattleProfile { unitName="敌方重型单位", unitClass=HexUnitClass.HeavyGround, maxHP=140, attackPower=30, attackType=HexAttackType.Explosion, bulletDefense=20, explosionDefense=15, movementPower=4, movementAPLimit=100, attackAP=120, captureAP=60, restAP=0, attackRange=1 }
+        new UnitBattleProfile { id="infantry", unitName="敌方步兵", unitClass=HexUnitClass.Infantry, maxHP=100, attackPower=20, attackType=HexAttackType.Bullet, bulletDefense=10, explosionDefense=8, movementPower=6, movementAPLimit=100, attackAP=100, captureAP=50, restAP=0, attackRange=1 },
+        new UnitBattleProfile { id="heavy_infantry", unitName="敌方重装步兵", unitClass=HexUnitClass.HeavyGround, maxHP=140, attackPower=30, attackType=HexAttackType.Explosion, bulletDefense=20, explosionDefense=15, movementPower=4, movementAPLimit=100, attackAP=120, captureAP=60, restAP=0, attackRange=1 }
     };
+
+    [Header("Unit Data File")]
+    [Tooltip("放在 Assets/Resources/GadgetUnitProfiles.json；不存在时使用 Inspector 内的备用配置。")]
+    public string unitDatabaseResourcePath = "GadgetUnitProfiles";
+    public string[] blueStartingProfileIds = { "infantry", "heavy_infantry" };
+    public string[] redStartingProfileIds = { "infantry", "heavy_infantry" };
 
     [Header("Sprite Resources")]
     [Tooltip("Resources path ending with the down_right folder.")]
@@ -111,6 +118,15 @@ public class HexUnitDemo : MonoBehaviour
         public Vector2Int previous;
     }
 
+    [System.Serializable]
+    private class UnitProfileDatabase
+    {
+        public UnitBattleProfile[] units;
+    }
+
+    private readonly Dictionary<string, UnitBattleProfile> profilesById =
+        new Dictionary<string, UnitBattleProfile>();
+
     private readonly List<UnitInfo> units = new List<UnitInfo>();
     private readonly HashSet<Vector2Int> reachableTiles = new HashSet<Vector2Int>();
     private readonly Dictionary<Vector2Int, PathNode> currentPaths = new Dictionary<Vector2Int, PathNode>();
@@ -143,9 +159,49 @@ public class HexUnitDemo : MonoBehaviour
         var red = LoadDirectionalFrames(redFramesResourcePath, "敌方",
             new Color32(235, 75, 70, 255), new Color32(255, 225, 190, 255));
 
-        SpawnStartingUnits(blueStartingPositions, blueUnitProfiles, 0, blue);
-        SpawnStartingUnits(redStartingPositions, redUnitProfiles, 1, red);
+        LoadUnitProfileDatabase();
+        SpawnStartingUnits(blueStartingPositions, blueUnitProfiles, blueStartingProfileIds, 0, blue);
+        SpawnStartingUnits(redStartingPositions, redUnitProfiles, redStartingProfileIds, 1, red);
         statusMessage = "我方操作阶段：移动可选；必须再执行攻击、占领或休整才能结束本次行动。";
+    }
+
+    private void LoadUnitProfileDatabase()
+    {
+        profilesById.Clear();
+        TextAsset json = Resources.Load<TextAsset>(unitDatabaseResourcePath);
+        if (json == null)
+        {
+            Debug.LogWarning("未找到 Resources/" + unitDatabaseResourcePath + ".json；当前使用 Inspector 里的备用单位配置。");
+            return;
+        }
+
+        UnitProfileDatabase database = JsonUtility.FromJson<UnitProfileDatabase>(json.text);
+        if (database == null || database.units == null)
+        {
+            Debug.LogError("单位数据 JSON 格式无效：需要顶层 units 数组。");
+            return;
+        }
+
+        foreach (UnitBattleProfile profile in database.units)
+        {
+            if (profile == null || string.IsNullOrWhiteSpace(profile.id))
+                continue;
+            string id = profile.id.Trim();
+            if (profilesById.ContainsKey(id))
+                Debug.LogWarning("单位数据中出现重复 id：" + id);
+            profilesById[id] = profile;
+        }
+
+        Debug.Log("已加载独立单位配置：" + profilesById.Count + " 种。");
+    }
+
+    private UnitBattleProfile ResolveProfile(string profileId, UnitBattleProfile[] fallbackProfiles, int index)
+    {
+        if (!string.IsNullOrWhiteSpace(profileId) && profilesById.TryGetValue(profileId.Trim(), out UnitBattleProfile fromFile))
+            return fromFile;
+        if (fallbackProfiles != null && index < fallbackProfiles.Length && fallbackProfiles[index] != null)
+            return fallbackProfiles[index];
+        return new UnitBattleProfile();
     }
 
     private Dictionary<string, Sprite[]> LoadDirectionalFrames(string path, string label, Color32 body, Color32 accent)
@@ -302,7 +358,7 @@ public class HexUnitDemo : MonoBehaviour
         statusMessage="已取消选择单位和地块。";
     }
 
-    private void SpawnStartingUnits(Vector2Int[] positions, UnitBattleProfile[] profiles, int team, Dictionary<string, Sprite[]> animations)
+    private void SpawnStartingUnits(Vector2Int[] positions, UnitBattleProfile[] fallbackProfiles, string[] profileIds, int team, Dictionary<string, Sprite[]> animations)
     {
         if(positions==null)return;
         for(int i=0;i<positions.Length;i++)
@@ -310,7 +366,8 @@ public class HexUnitDemo : MonoBehaviour
             int q=positions[i].x,r=positions[i].y;
             if(!battlefield.IsInsideMap(q,r)){Debug.LogWarning($"单位坐标 ({q},{r}) 超出地图。");continue;}
             if(FindUnitAt(q,r)!=null){Debug.LogWarning($"地块 ({q},{r}) 已有单位。");continue;}
-            UnitBattleProfile p=profiles!=null&&i<profiles.Length&&profiles[i]!=null?profiles[i]:new UnitBattleProfile();
+            string profileId=profileIds!=null&&i<profileIds.Length?profileIds[i]:"";
+            UnitBattleProfile p=ResolveProfile(profileId,fallbackProfiles,i);
             GameObject icon=new GameObject(team==0?"BlueUnitIcon":"RedUnitIcon");
             icon.transform.SetParent(transform,false);icon.transform.localPosition=HexToLocalPosition(q,r);icon.transform.localScale=Vector3.one*iconScale;
             SpriteRenderer sr=icon.AddComponent<SpriteRenderer>();
