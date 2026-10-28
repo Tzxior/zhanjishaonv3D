@@ -2,11 +2,11 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public enum HexAttackType { Bullet, Explosion }
-
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
+
+public enum HexAttackType { Bullet, Explosion }
 
 /// <summary>
 /// Unit selection, terrain-cost movement, optional movement followed by a required non-movement action,
