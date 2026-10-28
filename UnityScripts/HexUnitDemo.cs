@@ -31,6 +31,11 @@ public class HexUnitDemo : MonoBehaviour
         [TextArea(2, 4)] public string description = "";
         // Stable identifiers for unit abilities; individual effects are implemented in later gameplay steps.
         public string[] specialAbilities = new string[0];
+        [Min(-1)] public int reconRange = -1;
+        [Range(-1, 100)] public int concealment = -1;
+        public bool canDetectSpy = false;
+        [Min(-1)] public int resourceCapacity = -1;
+        public string[] dataGaps = new string[0];
         [Min(1)] public int maxHP=100;
         [Min(0)] public int attackPower=20;
         public HexAttackType attackType=HexAttackType.Bullet;
@@ -115,8 +120,12 @@ public class HexUnitDemo : MonoBehaviour
         public int ammoCapacity, fuelCapacity;
         public string description;
         public string[] specialAbilities;
+        public string[] dataGaps;
+        public int reconRange=-1, concealment=-1, resourceCapacity=-1;
+        public bool canDetectSpy;
         public HexAttackType attackType;
-        public int hp=100, maxHp=100, attack=20;
+        public int hp=100, maxHp=100, attack=20, baseAttackPower=20;
+        public int experience, rank;
         public int bulletDefense=10, explosionDefense=8;
         public int movementPower=6, movementAPLimit=100;
         public int attackAP=100, captureAP=50, restAP=0, attackRange=1;
@@ -390,9 +399,11 @@ public class HexUnitDemo : MonoBehaviour
                 nextReadyTime=0f,zeroCostActedAtTime=-1f,
                 unitName=string.IsNullOrWhiteSpace(p.unitName)?"未命名单位":p.unitName,
                 unitCategory=string.IsNullOrWhiteSpace(p.unitCategory)?"infantry":p.unitCategory,
-                ammoCapacity=Mathf.Max(0,p.ammoCapacity),fuelCapacity=Mathf.Max(0,p.fuelCapacity),
-                description=p.description,specialAbilities=p.specialAbilities,
-                hp=Mathf.Max(1,p.maxHP),maxHp=Mathf.Max(1,p.maxHP),attack=Mathf.Max(0,p.attackPower),attackType=p.attackType,
+                ammoCapacity=p.ammoCapacity,fuelCapacity=p.fuelCapacity,resourceCapacity=p.resourceCapacity,
+                reconRange=p.reconRange,concealment=p.concealment,canDetectSpy=p.canDetectSpy,
+                description=p.description,specialAbilities=p.specialAbilities,dataGaps=p.dataGaps,
+                hp=Mathf.Max(1,p.maxHP),maxHp=Mathf.Max(1,p.maxHP),
+                baseAttackPower=Mathf.Max(0,p.attackPower),attack=Mathf.Max(0,p.attackPower),experience=0,rank=0,attackType=p.attackType,
                 bulletDefense=Mathf.Max(0,p.bulletDefense),explosionDefense=Mathf.Max(0,p.explosionDefense),
                 movementPower=Mathf.Max(1,p.movementPower),movementAPLimit=Mathf.Max(1,p.movementAPLimit),
                 attackAP=Mathf.Max(0,p.attackAP),captureAP=Mathf.Max(0,p.captureAP),restAP=Mathf.Max(0,p.restAP),attackRange=Mathf.Max(1,p.attackRange),canCapture=p.canCapture};
@@ -519,6 +530,59 @@ public class HexUnitDemo : MonoBehaviour
     private int GetAttackDefense(UnitInfo target,HexAttackType type)=>type==HexAttackType.Bullet?target.bulletDefense:target.explosionDefense;
     private string AttackTypeName(HexAttackType type)=>type==HexAttackType.Bullet?"子弹":"爆炸";
 
+    private int RankFromExperience(int experience)
+    {
+        if (experience >= 5000) return 3;
+        if (experience >= 2600) return 2;
+        if (experience >= 1000) return 1;
+        return 0;
+    }
+
+    private string RankName(int rank)
+    {
+        switch(rank)
+        {
+            case 1: return "一条杠";
+            case 2: return "两条杠";
+            case 3: return "将星";
+            default: return "列兵";
+        }
+    }
+
+    private void GrantExperience(UnitInfo unit, int amount)
+    {
+        if (unit == null || amount <= 0 || unit.experience >= 5000) return;
+        int oldRank = RankFromExperience(unit.experience);
+        unit.experience = Mathf.Clamp(unit.experience + amount, 0, 5000);
+        int newRank = RankFromExperience(unit.experience);
+        if (newRank > oldRank)
+        {
+            for (int newLevel = oldRank + 1; newLevel <= newRank; newLevel++)
+            {
+                unit.maxHp += 10;
+                // Do not revive a unit that has already been lethally damaged.
+                if (unit.hp > 0) unit.hp += 10;
+            }
+            Debug.Log($"{unit.unitName}升阶为{RankName(newRank)}：最大生命值 +{(newRank-oldRank)*10}，攻击力提升到基础攻击的 {100+newRank*10}% 。");
+        }
+        unit.rank = newRank;
+        unit.attack = Mathf.RoundToInt(unit.baseAttackPower * (1f + 0.1f * newRank));
+    }
+
+    private void ApplyDamageAndAwardExperience(UnitInfo attacker, UnitInfo target, int damage)
+    {
+        if (target == null || damage <= 0) return;
+        int actualDamage = Mathf.Min(target.hp, damage);
+        target.hp = Mathf.Max(0, target.hp - actualDamage);
+        // Being damaged grants 2 XP per point of actual HP lost.
+        GrantExperience(target, actualDamage * 2);
+        if (target.hp <= 0 && attacker != null)
+        {
+            // The defeated unit transfers half of its current accumulated XP to the killer.
+            GrantExperience(attacker, Mathf.FloorToInt(target.experience * 0.5f));
+        }
+    }
+
     private bool IsUnitReady(UnitInfo unit)
     {
         if (unit == null || unit.nextReadyTime > battleTimeAP + 0.001f) return false;
@@ -547,7 +611,8 @@ public class HexUnitDemo : MonoBehaviour
 
         int terrainDefense=battlefield.GetDefenseBonus(target.q,target.r);
         int damage=Mathf.Max(1,selectedUnit.attack-GetAttackDefense(target,selectedUnit.attackType)-terrainDefense);
-        target.hp-=damage;int actionCost=selectedUnit.attackAP;
+        ApplyDamageAndAwardExperience(selectedUnit,target,damage);
+        int actionCost=selectedUnit.attackAP;
         statusMessage=$"{selectedUnit.unitName}使用{AttackTypeName(selectedUnit.attackType)}攻击，造成 {damage} 伤害；本次攻击消耗 {actionCost} AP。";
         if (target.hp <= 0)
         {
@@ -596,6 +661,9 @@ public class HexUnitDemo : MonoBehaviour
         if (selectedUnit == null) return;
         UnitInfo acted = selectedUnit;
         int totalCost = acted.pendingMoveAP + actionCost;
+
+        // Only the non-movement action cost awards AP-based experience; movement AP is excluded.
+        GrantExperience(acted, actionCost);
 
         if (totalCost == 0)
             acted.zeroCostActedAtTime = battleTimeAP;
@@ -712,7 +780,8 @@ public class HexUnitDemo : MonoBehaviour
             HexDistance(new Vector2Int(enemy.q, enemy.r), new Vector2Int(target.q, target.r)) <= enemy.attackRange)
         {
             int damage=Mathf.Max(1,enemy.attack-GetAttackDefense(target,enemy.attackType)-battlefield.GetDefenseBonus(target.q,target.r));
-            target.hp-=damage;actionCost=enemy.attackAP;
+            ApplyDamageAndAwardExperience(enemy,target,damage);
+            actionCost=enemy.attackAP;
             statusMessage = $"敌方攻击我方单位，造成 {damage} 伤害。";
             if (target.hp <= 0)
             {
@@ -743,6 +812,8 @@ public class HexUnitDemo : MonoBehaviour
             statusMessage = $"敌方移动结束并休整（休整 0 AP）；移动成本为 {moveCost} AP。";
         }
 
+        // AP experience is based on the non-movement action only, not moveCost.
+        GrantExperience(enemy, actionCost);
         int totalCost = moveCost + actionCost;
         enemy.nextReadyTime = battleTimeAP + totalCost;
         if (totalCost == 0) enemy.zeroCostActedAtTime = battleTimeAP;
@@ -888,10 +959,12 @@ public class HexUnitDemo : MonoBehaviour
             GUILayout.Label(selectedUnit.team==0?"我方单位属性":"敌方单位属性（只读）");
             GUILayout.Label($"单位：{selectedUnit.unitName}　分类：{CategoryName(selectedUnit.unitCategory)}");
             GUILayout.Label($"阵营：{(selectedUnit.team==0?"我方":"敌方")}　坐标：({selectedUnit.q},{selectedUnit.r})");
-            GUILayout.Label($"弹药容量：{selectedUnit.ammoCapacity}　燃料容量：{selectedUnit.fuelCapacity}");
+            GUILayout.Label($"弹药：{(selectedUnit.ammoCapacity < 0 ? "待确认" : selectedUnit.ammoCapacity.ToString())}　燃料：{(selectedUnit.fuelCapacity < 0 ? "待确认" : selectedUnit.fuelCapacity.ToString())}　载运：{(selectedUnit.resourceCapacity < 0 ? "待确认" : selectedUnit.resourceCapacity.ToString())}");
+            GUILayout.Label($"侦察：{(selectedUnit.reconRange < 0 ? "待确认" : selectedUnit.reconRange + " 格")}　隐蔽：{(selectedUnit.concealment < 0 ? "待确认" : selectedUnit.concealment + "/100")}　侦察间谍：{(selectedUnit.canDetectSpy ? "可以" : "不可以")}");
             if(!string.IsNullOrWhiteSpace(selectedUnit.description))
                 GUILayout.Label($"定位：{selectedUnit.description}");
             GUILayout.Label($"生命：{selectedUnit.hp}/{selectedUnit.maxHp}（{100f*selectedUnit.hp/Mathf.Max(1,selectedUnit.maxHp):0}%）");
+            GUILayout.Label($"经验：{selectedUnit.experience}/5000　军阶：{RankName(selectedUnit.rank)}　升阶加成：生命 +{selectedUnit.rank*10}，攻击 +{selectedUnit.rank*10}%");
             GUILayout.Label($"攻击力：{selectedUnit.attack}　攻击类型：{AttackTypeName(selectedUnit.attackType)}　范围：{selectedUnit.attackRange}");
             GUILayout.Label($"子弹防御：{selectedUnit.bulletDefense}　爆炸防御：{selectedUnit.explosionDefense}");
             GUILayout.Label($"移动力：{selectedUnit.movementPower}　暂记移动 AP：{selectedUnit.pendingMoveAP}");
