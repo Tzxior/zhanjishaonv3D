@@ -459,14 +459,14 @@ public class HexUnitDemo : MonoBehaviour
         moveMode = false;
         attackMode = true;
         ClearHighlights();
-        statusMessage = $"攻击模式：攻击范围 {GetAttackRange(selectedUnit.unitClass)} 格。点击范围内敌军。";
+        statusMessage = $"攻击模式：攻击范围 {selectedUnit.attackRange} 格。点击范围内敌军。";
     }
 
     private void ExecutePlayerAttack(UnitInfo target)
     {
         if (selectedUnit == null || selectedUnit.team != 0 || !IsUnitReady(selectedUnit)) return;
         int distance = HexDistance(new Vector2Int(selectedUnit.q, selectedUnit.r), new Vector2Int(target.q, target.r));
-        if (distance > GetAttackRange(selectedUnit.unitClass))
+        if (distance > selectedUnit.attackRange)
         {
             statusMessage = $"目标超出攻击范围（当前距离 {distance} 格）。";
             return;
