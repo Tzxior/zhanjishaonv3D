@@ -221,9 +221,10 @@ public class HexBattlefieldDemo : MonoBehaviour
         switch (tile.terrain)
         {
             case "Forest": return 10;
+            case "Hill": return 15;
             case "Mountain":
             case "MountainRoad": return 20;
-            case "City": return 25;
+            case "City": return 40;
             default: return 0;
         }
     }
