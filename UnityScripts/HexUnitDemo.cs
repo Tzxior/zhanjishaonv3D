@@ -35,6 +35,7 @@ public class HexUnitDemo : MonoBehaviour
         [Min(0)] public int captureAP=50;
         [Min(0)] public int restAP=0;
         [Min(1)] public int attackRange=1;
+        public bool canCapture=false;
     }
     [Header("Individual Unit Profiles (array order matches starting positions)")]
     [Tooltip("每个部署单位独立配置，增加条目即可继续制作原作的15个主要单位。")]
@@ -108,6 +109,7 @@ public class HexUnitDemo : MonoBehaviour
         public int bulletDefense=10, explosionDefense=8;
         public int movementPower=6, movementAPLimit=100;
         public int attackAP=100, captureAP=50, restAP=0, attackRange=1;
+        public bool canCapture;
     }
 
     private class PathNode
@@ -379,7 +381,7 @@ public class HexUnitDemo : MonoBehaviour
                 hp=Mathf.Max(1,p.maxHP),maxHp=Mathf.Max(1,p.maxHP),attack=Mathf.Max(0,p.attackPower),attackType=p.attackType,
                 bulletDefense=Mathf.Max(0,p.bulletDefense),explosionDefense=Mathf.Max(0,p.explosionDefense),
                 movementPower=Mathf.Max(1,p.movementPower),movementAPLimit=Mathf.Max(1,p.movementAPLimit),
-                attackAP=Mathf.Max(0,p.attackAP),captureAP=Mathf.Max(0,p.captureAP),restAP=Mathf.Max(0,p.restAP),attackRange=Mathf.Max(1,p.attackRange)};
+                attackAP=Mathf.Max(0,p.attackAP),captureAP=Mathf.Max(0,p.captureAP),restAP=Mathf.Max(0,p.restAP),attackRange=Mathf.Max(1,p.attackRange),canCapture=p.canCapture};
             sr.sprite=animations["down_right"][0];sr.sortingOrder=10;units.Add(u);
         }
     }
@@ -546,9 +548,9 @@ public class HexUnitDemo : MonoBehaviour
     private void OccupyCity()
     {
         if (selectedUnit == null || selectedUnit.team != 0 || !IsUnitReady(selectedUnit)) return;
-        if (selectedUnit.unitClass == HexUnitClass.Air)
+        if (!selectedUnit.canCapture)
         {
-            statusMessage = "空军单位不能执行城市占领。";
+            statusMessage = "该单位不具备占领能力。";
             return;
         }
         if (!battlefield.IsCity(selectedUnit.q, selectedUnit.r))
@@ -844,6 +846,7 @@ public class HexUnitDemo : MonoBehaviour
         {
             case HexUnitClass.HeavyGround: return "重型地面单位";
             case HexUnitClass.Air: return "空军单位";
+            case HexUnitClass.Naval: return "舰船单位";
             default: return "步兵";
         }
     }
@@ -863,6 +866,7 @@ public class HexUnitDemo : MonoBehaviour
             GUILayout.Label($"攻击力：{selectedUnit.attack}　攻击类型：{AttackTypeName(selectedUnit.attackType)}　范围：{selectedUnit.attackRange}");
             GUILayout.Label($"子弹防御：{selectedUnit.bulletDefense}　爆炸防御：{selectedUnit.explosionDefense}");
             GUILayout.Label($"移动力：{selectedUnit.movementPower}　暂记移动 AP：{selectedUnit.pendingMoveAP}");
+            GUILayout.Label($"占领能力：{(selectedUnit.canCapture ? "可以" : "不可以")}");
             GUILayout.Label(IsUnitReady(selectedUnit)?"行动状态：就绪":$"恢复中，剩余 {Mathf.CeilToInt(selectedUnit.nextReadyTime-battleTimeAP)} AP");
             if(selectedUnit.team==0&&!simulationRunning)
             {
@@ -873,7 +877,7 @@ public class HexUnitDemo : MonoBehaviour
                 GUI.enabled=ready;
                 if(GUILayout.Button($"攻击（{selectedUnit.attackAP} AP；范围 {selectedUnit.attackRange}）"))BeginAttackMode();
                 GUI.enabled=ready&&!attackMode&&battlefield.IsCity(selectedUnit.q,selectedUnit.r)&&
-                    battlefield.GetCityOwner(selectedUnit.q,selectedUnit.r)!=0&&selectedUnit.unitClass!=HexUnitClass.Air;
+                    battlefield.GetCityOwner(selectedUnit.q,selectedUnit.r)!=0&&selectedUnit.canCapture;
                 if(GUILayout.Button($"占领城市（{selectedUnit.captureAP} AP）"))OccupyCity();
                 GUI.enabled=ready;
                 if(GUILayout.Button($"休整（{selectedUnit.restAP} AP；结束行动）"))Rest();
