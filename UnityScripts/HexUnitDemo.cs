@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 #endif
 
+// Prototype release: v0.2.0 — configurable actions, support and transport.
 public enum HexAttackType { Bullet, Explosion }
 
 /// <summary>
@@ -36,7 +37,7 @@ public class HexUnitDemo : MonoBehaviour
         public bool canDetectSpy = false;
         [Min(-1)] public int resourceCapacity = -1;
         public string[] dataGaps = new string[0];
-        public string[] actions = new string[0];
+        public UnitActionProfile[] actions = new UnitActionProfile[0];
         [Min(1)] public int maxHP=100;
         [Min(0)] public int attackPower=20;
         public HexAttackType attackType=HexAttackType.Bullet;
@@ -50,6 +51,12 @@ public class HexUnitDemo : MonoBehaviour
         [Min(1)] public int attackRange=1;
         public bool canCapture=false;
     }
+    [System.Serializable] public class UnitActionProfile
+    {
+        public string id = "";
+        public string description = "";
+    }
+
     [Header("Individual Unit Profiles (array order matches starting positions)")]
     [Tooltip("每个部署单位独立配置；单位详细资料优先从 GadgetUnitProfiles.json 读取。")]
     public UnitBattleProfile[] blueUnitProfiles =
@@ -116,13 +123,18 @@ public class HexUnitDemo : MonoBehaviour
         public bool hasMovedThisActivation;
         public int pendingMoveAP;
 
+        public string unitId = "infantry";
         public string unitName;
         public string unitCategory = "infantry";
         public int ammoCapacity, fuelCapacity;
         public string description;
         public string[] specialAbilities;
         public string[] dataGaps;
-        public string[] actions;
+        public UnitActionProfile[] actions;
+        public int currentAmmo, currentFuel;
+        public UnitInfo carrier;
+        public readonly List<UnitInfo> cargo = new List<UnitInfo>();
+        public bool fortressGarrisoned;
         public int reconRange=-1, concealment=-1, resourceCapacity=-1;
         public bool canDetectSpy;
         public HexAttackType attackType;
@@ -162,6 +174,14 @@ public class HexUnitDemo : MonoBehaviour
     private bool simulationRunning;
     private bool moveMode = true;
     private bool attackMode;
+    private bool supportMode;
+    private string supportAction = "";
+    private string selectedAttackName = "攻击";
+    private float selectedAttackMultiplier = 1f;
+    private HexAttackType selectedAttackType = HexAttackType.Bullet;
+    private int selectedAttackCost = 100;
+    private bool selectedAttackNavalOnly, selectedAttackAirOnly, selectedAttackTrueDamage;
+    private bool transportMode;
     private bool hasSelectedTile;
     private int selectedTileQ;
     private int selectedTileR;
@@ -290,6 +310,8 @@ public class HexUnitDemo : MonoBehaviour
         // has enough reconnaissance to beat its concealment and it is within recon range.
         foreach(UnitInfo target in units)
         {
+            if(target.carrier != null)
+            { if(target.renderer != null) target.renderer.enabled = false; continue; }
             if(target.renderer == null || target.team == 0) continue;
             bool detected = false;
             foreach(UnitInfo observer in units)
@@ -379,6 +401,13 @@ public class HexUnitDemo : MonoBehaviour
         UnitInfo clicked=FindUnitAt(q,r);
         if(clicked!=null && clicked.team==1 && clicked.renderer!=null && !clicked.renderer.enabled)
             clicked=null;
+        if(selectedUnit!=null && selectedUnit.team==0 && transportMode)
+        {
+            if(clicked!=null && clicked.team==0 && clicked!=selectedUnit) { TryLoadCargo(clicked); return; }
+            if(clicked==null) { TryUnloadCargo(q,r); return; }
+        }
+        if(selectedUnit!=null && selectedUnit.team==0 && !string.IsNullOrEmpty(supportAction) && clicked!=null && clicked.team==0 && clicked!=selectedUnit)
+        { ExecuteSupportAction(clicked); return; }
         if(attackMode&&selectedUnit!=null&&clicked!=null&&clicked.team==1){ExecutePlayerAttack(clicked);return;}
         if(clicked!=null)
         {
@@ -408,7 +437,7 @@ public class HexUnitDemo : MonoBehaviour
     private void DeselectAll()
     {
         if(selectedUnit!=null&&selectedUnit.visual!=null)selectedUnit.visual.localScale=selectedUnit.baseScale;
-        selectedUnit=null;hasSelectedTile=false;moveMode=false;attackMode=false;ClearHighlights();
+        selectedUnit=null;hasSelectedTile=false;moveMode=false;attackMode=false;supportMode=false;supportAction="";transportMode=false;ClearHighlights();
         statusMessage="已取消选择单位和地块。";
     }
 
@@ -429,9 +458,11 @@ public class HexUnitDemo : MonoBehaviour
                 q=q,r=r,team=team,unitClass=p.unitClass,visual=icon.transform,renderer=sr,directionalFrames=animations,
                 currentDirection="down_right",baseScale=Vector3.one*iconScale,animationOffset=(q*3+r*7+team*5)*0.037f,
                 nextReadyTime=0f,zeroCostActedAtTime=-1f,
+                unitId=string.IsNullOrWhiteSpace(p.id)?"infantry":p.id,
                 unitName=string.IsNullOrWhiteSpace(p.unitName)?"未命名单位":p.unitName,
                 unitCategory=string.IsNullOrWhiteSpace(p.unitCategory)?"infantry":p.unitCategory,
                 ammoCapacity=p.ammoCapacity,fuelCapacity=p.fuelCapacity,resourceCapacity=p.resourceCapacity,
+                currentAmmo=Mathf.Max(0,p.ammoCapacity),currentFuel=Mathf.Max(0,p.fuelCapacity),
                 reconRange=p.reconRange,concealment=p.concealment,canDetectSpy=p.canDetectSpy,
                 description=p.description,specialAbilities=p.specialAbilities,dataGaps=p.dataGaps,actions=p.actions,
                 hp=Mathf.Max(1,p.maxHP),maxHp=Mathf.Max(1,p.maxHP),
@@ -625,27 +656,36 @@ public class HexUnitDemo : MonoBehaviour
     private void BeginAttackMode()
     {
         if (selectedUnit == null || selectedUnit.team != 0 || !IsUnitReady(selectedUnit)) return;
-        moveMode = false;
-        attackMode = true;
-        ClearHighlights();
-        statusMessage = $"攻击模式：攻击范围 {selectedUnit.attackRange} 格。点击范围内敌军。";
+        BeginConfiguredAttack("常规攻击",1f,selectedUnit.attackType,selectedUnit.attackAP);
+    }
+
+    private void BeginConfiguredAttack(string name,float multiplier,HexAttackType type,int cost,bool navalOnly=false,bool trueDamage=false,bool airOnly=false)
+    {
+        if(selectedUnit==null || selectedUnit.team!=0 || !IsUnitReady(selectedUnit)) return;
+        if(selectedUnit.unitId=="fortress" && !selectedUnit.fortressGarrisoned) { statusMessage="要塞处于机动形态，不能攻击。"; return; }
+        if(selectedUnit.ammoCapacity>0 && selectedUnit.currentAmmo<=0) { statusMessage="弹药不足。"; return; }
+        moveMode=false; attackMode=true; supportAction=""; transportMode=false;
+        selectedAttackName=name; selectedAttackMultiplier=multiplier; selectedAttackType=type; selectedAttackCost=cost;
+        selectedAttackNavalOnly=navalOnly; selectedAttackTrueDamage=trueDamage; selectedAttackAirOnly=airOnly;
+        ClearHighlights(); statusMessage=$"{name}模式：点击攻击范围内的合法目标。";
     }
 
     private void ExecutePlayerAttack(UnitInfo target)
     {
         if (selectedUnit == null || selectedUnit.team != 0 || !IsUnitReady(selectedUnit)) return;
         int distance = HexDistance(new Vector2Int(selectedUnit.q, selectedUnit.r), new Vector2Int(target.q, target.r));
-        if (distance > selectedUnit.attackRange)
-        {
-            statusMessage = $"目标超出攻击范围（当前距离 {distance} 格）。";
-            return;
-        }
-
+        if(distance>selectedUnit.attackRange) { statusMessage=$"目标超出攻击范围（当前距离 {distance} 格）。"; return; }
+        if(selectedAttackNavalOnly && target.unitClass!=HexUnitClass.Naval) { statusMessage="该行动只能攻击海军单位。"; return; }
+        if(selectedAttackAirOnly && target.unitClass!=HexUnitClass.Air) { statusMessage="该行动只能攻击空军单位。"; return; }
+        if(target.unitId=="sub" && selectedUnit.unitId!="destroyer" && selectedUnit.unitId!="cruiser") { statusMessage="潜航单位目前仅允许驱逐舰或巡洋舰攻击命中。"; return; }
+        if(selectedUnit.ammoCapacity>0 && selectedUnit.currentAmmo<=0) { statusMessage="弹药不足。"; return; }
         int terrainDefense=battlefield.GetDefenseBonus(target.q,target.r);
-        int damage=Mathf.Max(1,selectedUnit.attack-GetAttackDefense(target,selectedUnit.attackType)-terrainDefense);
+        int rawDamage=Mathf.RoundToInt(selectedUnit.attack*selectedAttackMultiplier);
+        int damage=selectedAttackTrueDamage?Mathf.Max(1,rawDamage):Mathf.Max(1,rawDamage-GetAttackDefense(target,selectedAttackType)-terrainDefense);
         ApplyDamageAndAwardExperience(selectedUnit,target,damage);
-        int actionCost=selectedUnit.attackAP;
-        statusMessage=$"{selectedUnit.unitName}使用{AttackTypeName(selectedUnit.attackType)}攻击，造成 {damage} 伤害；本次攻击消耗 {actionCost} AP。";
+        if(selectedUnit.ammoCapacity>0) selectedUnit.currentAmmo=Mathf.Max(0,selectedUnit.currentAmmo-1);
+        int actionCost=selectedAttackCost;
+        statusMessage=$"{selectedUnit.unitName}使用{selectedAttackName}造成 {damage} 伤害；消耗 {actionCost} AP。";
         if (target.hp <= 0)
         {
             units.Remove(target);
@@ -729,7 +769,7 @@ public class HexUnitDemo : MonoBehaviour
         {
             UnitInfo readyEnemy = null;
             foreach (UnitInfo unit in units)
-                if (unit.team == 1 && IsUnitReady(unit)) { readyEnemy = unit; break; }
+                if (unit.team == 1 && unit.carrier == null && IsUnitReady(unit)) { readyEnemy = unit; break; }
 
             if (readyEnemy != null)
             {
@@ -739,7 +779,7 @@ public class HexUnitDemo : MonoBehaviour
 
             float nextTime = float.PositiveInfinity;
             foreach (UnitInfo unit in units)
-                if (unit.nextReadyTime > battleTimeAP + 0.001f && unit.nextReadyTime < nextTime)
+                if (unit.carrier == null && unit.nextReadyTime > battleTimeAP + 0.001f && unit.nextReadyTime < nextTime)
                     nextTime = unit.nextReadyTime;
 
             if (float.IsInfinity(nextTime))
@@ -917,7 +957,7 @@ public class HexUnitDemo : MonoBehaviour
         int distance = int.MaxValue;
         foreach (UnitInfo unit in units)
         {
-            if (unit.team != 0) continue;
+            if (unit.team != 0 || unit.carrier != null) continue;
             int d = HexDistance(new Vector2Int(q, r), new Vector2Int(unit.q, unit.r));
             if (d < distance) { distance = d; best = unit; }
         }
@@ -927,14 +967,14 @@ public class HexUnitDemo : MonoBehaviour
     private bool HasReadyBlueUnit()
     {
         foreach (UnitInfo unit in units)
-            if (unit.team == 0 && IsUnitReady(unit)) return true;
+            if (unit.team == 0 && unit.carrier == null && IsUnitReady(unit)) return true;
         return false;
     }
 
     private UnitInfo FindUnitAt(int q, int r)
     {
         foreach (UnitInfo unit in units)
-            if (unit.q == q && unit.r == r) return unit;
+            if (unit.carrier == null && unit.q == q && unit.r == r) return unit;
         return null;
     }
 
@@ -991,12 +1031,12 @@ public class HexUnitDemo : MonoBehaviour
             GUILayout.Label(selectedUnit.team==0?"我方单位属性":"敌方单位属性（只读）");
             GUILayout.Label($"单位：{selectedUnit.unitName}　分类：{CategoryName(selectedUnit.unitCategory)}");
             GUILayout.Label($"阵营：{(selectedUnit.team==0?"我方":"敌方")}　坐标：({selectedUnit.q},{selectedUnit.r})");
-            GUILayout.Label($"弹药：{(selectedUnit.ammoCapacity < 0 ? "待确认" : selectedUnit.ammoCapacity.ToString())}　燃料：{(selectedUnit.fuelCapacity < 0 ? "待确认" : selectedUnit.fuelCapacity.ToString())}　载运：{(selectedUnit.resourceCapacity < 0 ? "待确认" : selectedUnit.resourceCapacity.ToString())}");
+            GUILayout.Label($"弹药：{(selectedUnit.ammoCapacity < 0 ? "待确认" : selectedUnit.currentAmmo + "/" + selectedUnit.ammoCapacity)}　燃料：{(selectedUnit.fuelCapacity < 0 ? "待确认" : selectedUnit.currentFuel + "/" + selectedUnit.fuelCapacity)}　载运：{(selectedUnit.resourceCapacity < 0 ? "待确认" : selectedUnit.cargo.Count + "/" + selectedUnit.resourceCapacity)}");
             GUILayout.Label($"侦察：{(selectedUnit.reconRange < 0 ? "待确认" : selectedUnit.reconRange + " 格")}　隐蔽：{(selectedUnit.concealment < 0 ? "待确认" : selectedUnit.concealment + "/100")}　侦察间谍：{(selectedUnit.canDetectSpy ? "可以" : "不可以")}");
             if(!string.IsNullOrWhiteSpace(selectedUnit.description))
                 GUILayout.Label($"定位：{selectedUnit.description}");
             if(selectedUnit.actions!=null && selectedUnit.actions.Length>0)
-                GUILayout.Label("行动配置：" + string.Join("；", selectedUnit.actions));
+                GUILayout.Label("行动配置：" + ActionDescriptions(selectedUnit));
             GUILayout.Label($"生命：{selectedUnit.hp}/{selectedUnit.maxHp}（{100f*selectedUnit.hp/Mathf.Max(1,selectedUnit.maxHp):0}%）");
             GUILayout.Label($"经验：{selectedUnit.experience}/5000　军阶：{RankName(selectedUnit.rank)}　升阶加成：生命 +{selectedUnit.rank*10}，攻击 +{selectedUnit.rank*10}%");
             GUILayout.Label($"攻击力：{selectedUnit.attack}　攻击类型：{AttackTypeName(selectedUnit.attackType)}　范围：{selectedUnit.attackRange}");
@@ -1010,17 +1050,27 @@ public class HexUnitDemo : MonoBehaviour
                 GUI.enabled=ready&&!selectedUnit.hasMovedThisActivation&&!attackMode;
                 if(GUILayout.Button("移动（可选；不结束行动）"))
                 {moveMode=true;attackMode=false;RefreshMovementHighlights();statusMessage="点击青色地块移动；移动后仍需执行非移动行动。";}
-                GUI.enabled=ready && selectedUnit.attack > 0 && selectedUnit.attackAP > 0;
-                if(GUILayout.Button($"攻击（{selectedUnit.attackAP} AP；范围 {selectedUnit.attackRange}）"))BeginAttackMode();
+                GUI.enabled=ready && selectedUnit.attack > 0;
+                DrawConfiguredActionButtons(ready);
                 GUI.enabled=ready&&!attackMode&&battlefield.IsCity(selectedUnit.q,selectedUnit.r)&&
                     battlefield.GetCityOwner(selectedUnit.q,selectedUnit.r)!=0&&selectedUnit.canCapture;
                 if(GUILayout.Button($"占领城市（{selectedUnit.captureAP} AP）"))OccupyCity();
-                GUI.enabled=ready;
+                GUI.enabled=ready&&!attackMode;
+                if(CanUnitTransport(selectedUnit) && GUILayout.Button(transportMode ? "取消装载/卸载" : "装载/卸载（100 AP）"))
+                { transportMode=!transportMode; supportAction=""; supportMode=false; attackMode=false; statusMessage=transportMode?"运输模式：点击相邻友军装载，或点击相邻空地卸载。":"已退出运输模式。"; }
+                DrawSupportButtons(ready);
+                GUI.enabled=ready&&!attackMode&&!transportMode&&string.IsNullOrEmpty(supportAction);
                 if(GUILayout.Button($"休整（{selectedUnit.restAP} AP；结束行动）"))Rest();
+                if(selectedUnit.unitId=="fortress" && GUILayout.Button(selectedUnit.fortressGarrisoned?"要塞切换机动形态（0 AP）":"要塞切换驻守形态（0 AP）"))
+                { selectedUnit.fortressGarrisoned=!selectedUnit.fortressGarrisoned; statusMessage=selectedUnit.fortressGarrisoned?"要塞已进入驻守形态，可攻击。":"要塞已进入机动形态，无法攻击。"; FinishPlayerActivation(0); }
                 if(attackMode&&GUILayout.Button("取消攻击"))
                 {attackMode=false;moveMode=selectedUnit!=null&&!selectedUnit.hasMovedThisActivation;RefreshMovementHighlights();statusMessage="已取消攻击模式。";}
                 GUI.enabled=true;
-                GUILayout.Label(selectedUnit.hasMovedThisActivation?"已移动：仍须执行攻击、占领或休整。":"移动为可选行动；非移动行动结束本次行动。");
+                if(selectedUnit.cargo.Count>0) foreach(UnitInfo passenger in selectedUnit.cargo) GUILayout.Label("载员："+passenger.unitName);
+                if(attackMode) GUILayout.Label("当前攻击行动："+selectedAttackName);
+                if(transportMode) GUILayout.Label("运输模式：点击相邻友军装载，或点击相邻空地卸载。");
+                if(!string.IsNullOrEmpty(supportAction)) GUILayout.Label("支援模式："+supportAction+"；点击相邻友军。");
+                GUILayout.Label(selectedUnit.hasMovedThisActivation?"已移动：仍须执行一个非移动行动。":"移动为可选行动；非移动行动结束本次行动。");
             }
         }
         else GUILayout.Label("未选中单位。点击单位查看属性，点击空地块查看地形。");
@@ -1038,6 +1088,76 @@ public class HexUnitDemo : MonoBehaviour
         GUILayout.Space(5);GUI.enabled=!simulationRunning&&!HasReadyBlueUnit();
         if(GUILayout.Button("推进战场时间 / 执行敌方行动"))StartCoroutine(RunSimulationUntilPlayerCanAct());
         GUI.enabled=true;GUILayout.Label(statusMessage);GUILayout.EndArea();
+    }
+
+    private string ActionDescriptions(UnitInfo unit)
+    {
+        var list=new List<string>();
+        if(unit.actions!=null) foreach(UnitActionProfile action in unit.actions)
+            if(action!=null && !string.IsNullOrWhiteSpace(action.description)) list.Add(action.description);
+        return string.Join("；",list);
+    }
+
+    private void DrawConfiguredActionButtons(bool ready)
+    {
+        GUI.enabled=ready&&!transportMode&&string.IsNullOrEmpty(supportAction);
+        switch(selectedUnit.unitId)
+        {
+            case "infantry": if(GUILayout.Button("步枪（50 AP）")) BeginConfiguredAttack("步枪",1,HexAttackType.Bullet,50); if(GUILayout.Button("手雷（150%爆炸，50 AP）")) BeginConfiguredAttack("手雷",1.5f,HexAttackType.Explosion,50); break;
+            case "heavy_infantry": if(GUILayout.Button("机枪（60 AP）")) BeginConfiguredAttack("机枪",1,HexAttackType.Bullet,60); if(GUILayout.Button("集束手雷（200%，60 AP）")) BeginConfiguredAttack("集束手雷",2,HexAttackType.Explosion,60); break;
+            case "engineer": if(GUILayout.Button("步枪（40 AP）")) BeginConfiguredAttack("步枪",1,HexAttackType.Bullet,40); break;
+            case "sniper": if(GUILayout.Button("狙击（80 AP）")) BeginConfiguredAttack("狙击",1,HexAttackType.Bullet,80); break;
+            case "spy": if(GUILayout.Button("刺杀（真实伤害；临时按100 AP）")) BeginConfiguredAttack("刺杀",1,HexAttackType.Bullet,100,false,true); break;
+            case "scout": case "apc": case "transport_aircraft": case "transport_ship": if(GUILayout.Button("机枪/机炮（50 AP）")) BeginConfiguredAttack("机枪/机炮",1,HexAttackType.Bullet,50); break;
+            case "tank": case "heavy_tank": case "self_propelled_gun": case "rockets": case "battleship": case "bomber":
+                if(GUILayout.Button("主武器攻击（80 AP）")) BeginConfiguredAttack("主武器攻击",1,HexAttackType.Explosion,80); break;
+            case "sub": if(GUILayout.Button("鱼雷（仅海军，80 AP）")) BeginConfiguredAttack("鱼雷",1,HexAttackType.Explosion,80,true); break;
+            case "anti_air": if(GUILayout.Button("防空炮（仅空军，80 AP）")) BeginConfiguredAttack("防空炮",1,HexAttackType.Bullet,80,false,false,true); break;
+            case "fortress": if(GUILayout.Button("驻守炮击（80 AP）")) BeginConfiguredAttack("驻守炮击",1,HexAttackType.Explosion,80); break;
+            case "fighter": if(GUILayout.Button("机枪（50%，50 AP）")) BeginConfiguredAttack("机枪",0.5f,HexAttackType.Bullet,50); if(GUILayout.Button("空袭（80 AP）")) BeginConfiguredAttack("空袭",1,HexAttackType.Explosion,80); break;
+            case "torpedo_plane": if(GUILayout.Button("鱼雷攻击（仅海军，80 AP）")) BeginConfiguredAttack("鱼雷攻击",1,HexAttackType.Explosion,80,true); break;
+            case "destroyer": if(GUILayout.Button("舰炮（50%，50 AP）")) BeginConfiguredAttack("舰炮",0.5f,HexAttackType.Bullet,50); if(GUILayout.Button("鱼雷（80 AP）")) BeginConfiguredAttack("鱼雷",1,HexAttackType.Explosion,80); break;
+            case "cruiser": if(GUILayout.Button("舰炮（50%，50 AP）")) BeginConfiguredAttack("舰炮",0.5f,HexAttackType.Bullet,50); if(GUILayout.Button("鱼雷/重炮（80 AP）")) BeginConfiguredAttack("鱼雷/重炮",1,HexAttackType.Explosion,80); break;
+        }
+        GUI.enabled=true;
+    }
+
+    private bool CanUnitTransport(UnitInfo u) => u!=null && u.resourceCapacity>0 && (u.unitId=="apc"||u.unitId=="transport_aircraft"||u.unitId=="transport_ship");
+
+    private void DrawSupportButtons(bool ready)
+    {
+        if(!ready||selectedUnit==null||attackMode||transportMode) return;
+        if(selectedUnit.unitId=="medic")
+        { if(GUILayout.Button("治疗友军（恢复损血的50%，100 AP）")) BeginSupportMode("heal"); if(GUILayout.Button("鼓舞友军（等待AP减半，80 AP）")) BeginSupportMode("inspire"); }
+        if(selectedUnit.unitId=="apc"||selectedUnit.unitId=="transport_ship")
+        { if(selectedUnit.currentFuel>=5&&GUILayout.Button("补给燃料 +5（80 AP）")) BeginSupportMode("fuel"); if(selectedUnit.currentAmmo>=2&&GUILayout.Button("补给弹药 +2（80 AP）")) BeginSupportMode("ammo"); }
+        if((selectedUnit.unitId=="refuel_aircraft"||selectedUnit.unitId=="aircraft_carrier")&&selectedUnit.currentFuel>=5&&GUILayout.Button("加油 +5（80 AP）")) BeginSupportMode("fuel");
+    }
+    private void BeginSupportMode(string action) { supportAction=action; supportMode=true; attackMode=false; transportMode=false; moveMode=false; ClearHighlights(); statusMessage="支援模式："+action+"。点击相邻友军。"; }
+    private void ExecuteSupportAction(UnitInfo target)
+    {
+        if(selectedUnit==null||target==null||target.team!=selectedUnit.team||HexDistance(new Vector2Int(selectedUnit.q,selectedUnit.r),new Vector2Int(target.q,target.r))>1) { statusMessage="支援目标必须是相邻友军。"; return; }
+        int cost=80;
+        if(supportAction=="heal") { int amount=Mathf.FloorToInt(Mathf.Max(0,target.maxHp-target.hp)*0.5f); if(amount<=0){statusMessage="目标不需要治疗。";return;} target.hp=Mathf.Min(target.maxHp,target.hp+amount);cost=100;statusMessage=$"{target.unitName}恢复 {amount} HP。"; }
+        else if(supportAction=="inspire") { float remain=Mathf.Max(0,target.nextReadyTime-battleTimeAP);if(remain<=0){statusMessage="目标已就绪。";return;}target.nextReadyTime=battleTimeAP+remain*0.5f;statusMessage=$"{target.unitName}等待AP减半。"; }
+        else if(supportAction=="fuel") { if(selectedUnit.currentFuel<5||target.fuelCapacity<=0||target.currentFuel>=target.fuelCapacity){statusMessage="燃料补给条件不满足。";return;}int n=Mathf.Min(5,target.fuelCapacity-target.currentFuel);selectedUnit.currentFuel-=n;target.currentFuel+=n;statusMessage=$"补充燃料 {n}。"; }
+        else if(supportAction=="ammo") { if(selectedUnit.currentAmmo<2||target.ammoCapacity<=0||target.currentAmmo>=target.ammoCapacity){statusMessage="弹药补给条件不满足。";return;}int n=Mathf.Min(2,target.ammoCapacity-target.currentAmmo);selectedUnit.currentAmmo-=n;target.currentAmmo+=n;statusMessage=$"补充弹药 {n}。"; }
+        supportAction="";supportMode=false;FinishPlayerActivation(cost);
+    }
+    private void TryLoadCargo(UnitInfo passenger)
+    {
+        if(selectedUnit==null||!CanUnitTransport(selectedUnit)||passenger.team!=selectedUnit.team||passenger.carrier!=null||passenger.unitClass==HexUnitClass.Air||passenger.unitClass==HexUnitClass.Naval){statusMessage="只能装载相邻、同阵营的陆地单位。";return;}
+        if(selectedUnit.cargo.Count>=selectedUnit.resourceCapacity){statusMessage="运载容量已满。";return;}
+        if(HexDistance(new Vector2Int(selectedUnit.q,selectedUnit.r),new Vector2Int(passenger.q,passenger.r))>1){statusMessage="载员必须相邻。";return;}
+        selectedUnit.cargo.Add(passenger);passenger.carrier=selectedUnit;if(passenger.renderer!=null)passenger.renderer.enabled=false;transportMode=false;statusMessage=passenger.unitName+"已装载。";FinishPlayerActivation(100);
+    }
+    private void TryUnloadCargo(int q,int r)
+    {
+        if(selectedUnit==null||!CanUnitTransport(selectedUnit)||selectedUnit.cargo.Count==0){statusMessage="运输单位没有载员。";return;}
+        if(HexDistance(new Vector2Int(selectedUnit.q,selectedUnit.r),new Vector2Int(q,r))>1){statusMessage="卸载地块须相邻。";return;}
+        UnitInfo passenger=selectedUnit.cargo[0];
+        if(!battlefield.IsInsideMap(q,r)||FindUnitAt(q,r)!=null||!battlefield.IsTileWalkable(q,r,passenger.unitClass)){statusMessage="此地块不可卸载。";return;}
+        selectedUnit.cargo.RemoveAt(0);passenger.carrier=null;passenger.q=q;passenger.r=r;if(passenger.visual!=null)passenger.visual.localPosition=HexToLocalPosition(q,r);if(passenger.renderer!=null)passenger.renderer.enabled=true;transportMode=false;statusMessage=passenger.unitName+"已卸载。";FinishPlayerActivation(100);
     }
 
     private string TerrainAPCost(int q,int r,HexUnitClass type)
