@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 4,
-  "notes": "Profile stats and action descriptions are based on user-provided 单位信息.csv. reconRange is the reconnaissance stat/range; a target is detected only if observer.reconRange >= target.concealment and the target is within observer.reconRange hexes. Values for action descriptions are data only; not all special actions are implemented in combat code yet. Experience thresholds 1000/2600/5000, max 5000, rank bonuses handled in HexUnitDemo.cs.",
+  "schemaVersion": 5,
+  "notes": "Based on user-provided 单位信息.csv, not verified original-game official data. v0.2.0 implements configurable attack actions, ammo inventory use, support/healing, fuel/ammo resupply, transport loading/unloading, and fortress stance. Temporary rules and unimplemented powers are documented in Releases/v0.2.0/README_v0.2.0.md. Detection requires observer.reconRange >= target.concealment and distance <= reconRange.",
   "units": [
     {
       "id": "infantry",
@@ -990,5 +990,6 @@
         }
       ]
     }
-  ]
+  ],
+  "prototypeVersion": "0.2.0"
 }
