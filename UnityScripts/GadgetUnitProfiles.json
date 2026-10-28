@@ -641,7 +641,7 @@
       "attackRange": 6,
       "canCapture": false,
       "ammoCapacity": 20,
-      "fuelCapacity": 0,
+      "fuelCapacity": -1,
       "description": "需切换为驻守形态才能攻击；机动形态不能攻击。",
       "specialAbilities": [
         "deploy_to_attack",
@@ -653,7 +653,8 @@
       "resourceCapacity": 0,
       "dataGaps": [
         "侦察范围与隐蔽值为原型估算，待确认",
-        "机动/驻守形态切换AP与攻击限制待定义"
+        "机动/驻守形态切换AP与攻击限制待定义",
+        "燃料容量待确认"
       ]
     },
     {
