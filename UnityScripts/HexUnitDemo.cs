@@ -709,7 +709,7 @@ public class HexUnitDemo : MonoBehaviour
             if (enemyActionDisplayDelay > 0f)
                 yield return new WaitForSecondsRealtime(enemyActionDisplayDelay);
         }
-        else if (battlefield.IsCity(enemy.q, enemy.r) && battlefield.GetCityOwner(enemy.q, enemy.r) != 1 && enemy.unitClass != HexUnitClass.Air)
+        else if (battlefield.IsCity(enemy.q, enemy.r) && battlefield.GetCityOwner(enemy.q, enemy.r) != 1 && enemy.canCapture)
         {
             battlefield.CaptureCity(enemy.q, enemy.r, 1);
             actionCost=enemy.captureAP;
