@@ -259,7 +259,7 @@ public class HexUnitDemo : MonoBehaviour
     private bool PointerOverHud()
     {
         Vector2 p = GetPointerPosition();
-        return p.x <= 390f && p.y >= Screen.height - 440f;
+        return p.x <= 400f && p.y >= Screen.height - 640f;
     }
 
     private void HandleMapClick()
@@ -794,7 +794,7 @@ public class HexUnitDemo : MonoBehaviour
     private void OnGUI()
     {
         if(!showBattleHUD)return;
-        GUILayout.BeginArea(new Rect(12f,12f,390f,520f),GUI.skin.box);
+        GUILayout.BeginArea(new Rect(12f,12f,400f,640f),GUI.skin.box);
         GUILayout.Label($"战场 AP：{battleTimeAP:0}");
         GUILayout.Label(simulationRunning?"阶段：敌方行动（模拟时间离散推进）":"阶段：我方操作（模拟时间暂停）");
         if(selectedUnit!=null)
