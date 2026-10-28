@@ -1,14 +1,9 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-#if ENABLE_INPUT_SYSTEM
-using UnityEngine.InputSystem;
-#endif
-
 /// <summary>
-/// First prototype of the strategy battlefield: generates a flat-top hex grid,
-/// colors cells by terrain type, positions the camera, and lets the player select cells.
-/// The grid is generated at runtime and will disappear when Play mode stops.
+/// 生成六边形战场地图，并统一管理地块颜色与可通行性。
+/// 与 HexUnitDemo 挂在同一个 GameObject 上。
 /// </summary>
 public class HexBattlefieldDemo : MonoBehaviour
 {
@@ -23,11 +18,17 @@ public class HexBattlefieldDemo : MonoBehaviour
     public float cameraBackOffset = 18f;
     [Range(30f, 80f)] public float cameraFieldOfView = 55f;
 
+    [Header("Movement Highlight")]
+    public Color reachableTileColor = new Color(0.18f, 0.78f, 0.88f);
+
     private Mesh hexMesh;
     private Camera mainCamera;
+
     private readonly Dictionary<Collider, TileInfo> tilesByCollider =
         new Dictionary<Collider, TileInfo>();
-    private TileInfo selectedTile;
+
+    private readonly Dictionary<Vector2Int, TileInfo> tilesByCoordinates =
+        new Dictionary<Vector2Int, TileInfo>();
 
     private class TileInfo
     {
@@ -36,20 +37,17 @@ public class HexBattlefieldDemo : MonoBehaviour
         public string terrain;
         public Material material;
         public Color baseColor;
+        public bool isReachable;
     }
 
     private void Start()
     {
         columns = Mathf.Max(1, columns);
         rows = Mathf.Max(1, rows);
+
         hexMesh = CreateHexPrismMesh(hexSize * 0.96f, tileThickness);
         BuildMap();
         PositionCamera();
-    }
-
-    private void Update()
-    {
-        HandleTileSelection();
     }
 
     private Vector3 GetMapCenter()
@@ -79,10 +77,10 @@ public class HexBattlefieldDemo : MonoBehaviour
                          ((rows - 1) + (columns - 1) * 0.5f) +
                          Mathf.Sqrt(3f) * hexSize;
 
-        // A dark backing plane shows through the small gaps between hexes.
         GameObject backdrop = GameObject.CreatePrimitive(PrimitiveType.Plane);
         backdrop.name = "HexMapBackdrop";
         backdrop.transform.SetParent(transform, false);
+
         Vector3 mapCenter = GetMapCenter();
         backdrop.transform.position = new Vector3(
             mapCenter.x, -tileThickness * 0.5f - 0.06f, mapCenter.z);
@@ -103,9 +101,7 @@ public class HexBattlefieldDemo : MonoBehaviour
                     0f,
                     verticalStep * (r + q * 0.5f));
 
-                string terrain;
-                Color terrainColor;
-                GetTerrain(q, r, out terrain, out terrainColor);
+                GetTerrain(q, r, out string terrain, out Color terrainColor);
 
                 GameObject tile = new GameObject($"Hex_{q}_{r}_{terrain}");
                 tile.transform.SetParent(transform, false);
@@ -128,18 +124,20 @@ public class HexBattlefieldDemo : MonoBehaviour
                     r = r,
                     terrain = terrain,
                     material = tileMaterial,
-                    baseColor = terrainColor
+                    baseColor = terrainColor,
+                    isReachable = false
                 };
+
                 tilesByCollider[meshCollider] = info;
+                tilesByCoordinates[new Vector2Int(q, r)] = info;
             }
         }
 
-        Debug.Log($"Hex battlefield ready: {columns} x {rows} = {columns * rows} hexes. Click a hex in Game view to select it.");
+        Debug.Log($"Hex battlefield ready: {columns} x {rows} = {columns * rows} hexes.");
     }
 
     private void GetTerrain(int q, int r, out string terrain, out Color color)
     {
-        // Deterministic pseudo-random layout so the map stays the same each run.
         int value = (q * 37 + r * 19 + q * r * 13) % 100;
 
         if (value < 8)
@@ -174,7 +172,7 @@ public class HexBattlefieldDemo : MonoBehaviour
         mainCamera = Camera.main;
         if (mainCamera == null)
         {
-            Debug.LogWarning("HexBattlefieldDemo: No camera tagged MainCamera was found. Add a camera and set its Tag to MainCamera.");
+            Debug.LogWarning("HexBattlefieldDemo: 找不到标记为 MainCamera 的摄像机。");
             return;
         }
 
@@ -184,39 +182,62 @@ public class HexBattlefieldDemo : MonoBehaviour
         mainCamera.fieldOfView = cameraFieldOfView;
     }
 
-    private void HandleTileSelection()
+    /// <summary>将当前可移动范围内的地块染色；传入空集合则清除高亮。</summary>
+    public void SetMovementHighlights(IEnumerable<Vector2Int> coordinates)
     {
-        bool clicked = false;
-        Vector2 pointerPosition = Vector2.zero;
-
-#if ENABLE_INPUT_SYSTEM
-        if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+        foreach (TileInfo tile in tilesByCoordinates.Values)
         {
-            clicked = true;
-            pointerPosition = Mouse.current.position.ReadValue();
+            tile.isReachable = false;
         }
-#else
-        if (Input.GetMouseButtonDown(0))
-        {
-            clicked = true;
-            pointerPosition = Input.mousePosition;
-        }
-#endif
 
-        if (!clicked || mainCamera == null)
+        if (coordinates != null)
+        {
+            foreach (Vector2Int coordinate in coordinates)
+            {
+                if (tilesByCoordinates.TryGetValue(coordinate, out TileInfo tile))
+                {
+                    tile.isReachable = true;
+                }
+            }
+        }
+
+        foreach (TileInfo tile in tilesByCoordinates.Values)
+        {
+            RefreshTileColor(tile);
+        }
+    }
+
+    public bool IsTileWalkable(int q, int r)
+    {
+        return tilesByCoordinates.TryGetValue(new Vector2Int(q, r), out TileInfo tile)
+               && tile.terrain != "Water";
+    }
+
+    public bool IsInsideMap(int q, int r)
+    {
+        return q >= 0 && q < columns && r >= 0 && r < rows;
+    }
+
+    public bool TryGetTerrain(int q, int r, out string terrain)
+    {
+        if (tilesByCoordinates.TryGetValue(new Vector2Int(q, r), out TileInfo tile))
+        {
+            terrain = tile.terrain;
+            return true;
+        }
+
+        terrain = "";
+        return false;
+    }
+
+    private void RefreshTileColor(TileInfo tile)
+    {
+        if (tile.material == null)
             return;
 
-        Ray ray = mainCamera.ScreenPointToRay(pointerPosition);
-        if (Physics.Raycast(ray, out RaycastHit hit, 1000f) &&
-            tilesByCollider.TryGetValue(hit.collider, out TileInfo tile))
-        {
-            if (selectedTile != null)
-                selectedTile.material.color = selectedTile.baseColor;
-
-            selectedTile = tile;
-            selectedTile.material.color = new Color(1f, 0.82f, 0.16f);
-            Debug.Log($"Selected hex ({tile.q}, {tile.r}) - Terrain: {tile.terrain}");
-        }
+        tile.material.color = tile.isReachable
+            ? reachableTileColor
+            : tile.baseColor;
     }
 
     private Mesh CreateHexPrismMesh(float radius, float thickness)
@@ -225,23 +246,25 @@ public class HexBattlefieldDemo : MonoBehaviour
         Vector3[] vertices = new Vector3[38];
         int[] triangles = new int[72];
 
-        vertices[0] = new Vector3(0f, half, 0f);   // Top center
-        vertices[7] = new Vector3(0f, -half, 0f); // Bottom center
+        vertices[0] = new Vector3(0f, half, 0f);
+        vertices[7] = new Vector3(0f, -half, 0f);
 
         for (int i = 0; i < 6; i++)
         {
+            int next = (i + 1) % 6;
             float angle = Mathf.Deg2Rad * (60f * i);
             float x = Mathf.Cos(angle) * radius;
             float z = Mathf.Sin(angle) * radius;
+
             vertices[1 + i] = new Vector3(x, half, z);
             vertices[8 + i] = new Vector3(x, -half, z);
         }
 
-        // Separate vertices for the sides keep the top and side normals crisp.
         for (int i = 0; i < 6; i++)
         {
             int next = (i + 1) % 6;
             int start = 14 + i * 4;
+
             vertices[start] = vertices[1 + i];
             vertices[start + 1] = vertices[1 + next];
             vertices[start + 2] = vertices[8 + next];
@@ -253,17 +276,14 @@ public class HexBattlefieldDemo : MonoBehaviour
         {
             int next = (i + 1) % 6;
 
-            // Top face: upward-facing triangles.
             triangles[t++] = 0;
             triangles[t++] = 1 + next;
             triangles[t++] = 1 + i;
 
-            // Bottom face: downward-facing triangles.
             triangles[t++] = 7;
             triangles[t++] = 8 + i;
             triangles[t++] = 8 + next;
 
-            // Side face.
             int start = 14 + i * 4;
             triangles[t++] = start;
             triangles[t++] = start + 1;
