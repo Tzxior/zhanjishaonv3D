@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 2,
-  "notes": "Prototype data schema. Combat stats are provisional balance values, not verified raw original-game stats. ammoCapacity and fuelCapacity are maximum capacity; 0 means no system / not configured. specialAbilities are stable design identifiers; most abilities are data-described but not yet wired into battle logic.",
+  "schemaVersion": 3,
+  "notes": "All unit names are generic and omit original character names. Combat values are provisional balance presets, not verified raw original-game values. ammoCapacity/fuelCapacity/resourceCapacity: -1=unspecified and needs confirmation; 0=no capacity or system; positive=capacity. reconRange and concealment (0-100, higher is harder to detect) are provisional estimates, not verified values. Experience thresholds are 1000/2600/5000; max experience 5000; rank bonuses are handled by HexUnitDemo at runtime. specialAbilities documents intended design; many abilities are not yet implemented in battle logic. dataGaps lists follow-up items.",
   "units": [
     {
       "id": "infantry",
@@ -25,6 +25,13 @@
       "specialAbilities": [
         "rifle_attack",
         "grenade_attack"
+      ],
+      "reconRange": 3,
+      "concealment": 20,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "侦察范围与隐蔽值为原型估算，待确认"
       ]
     },
     {
@@ -50,6 +57,13 @@
       "specialAbilities": [
         "machine_gun_attack",
         "cluster_grenade_attack"
+      ],
+      "reconRange": 3,
+      "concealment": 15,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "侦察范围与隐蔽值为原型估算，待确认"
       ]
     },
     {
@@ -75,6 +89,14 @@
       "specialAbilities": [
         "heal_adjacent_land_ally_50_percent_missing_hp",
         "inspire_halve_remaining_ap"
+      ],
+      "reconRange": 3,
+      "concealment": 20,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "侦察范围与隐蔽值为原型估算，待确认",
+        "治疗/鼓舞AP、补给消耗与目标等待AP计算规则待落地"
       ]
     },
     {
@@ -94,12 +116,20 @@
       "restAP": 0,
       "attackRange": 1,
       "canCapture": false,
-      "ammoCapacity": 0,
+      "ammoCapacity": -1,
       "fuelCapacity": 20,
       "description": "拥有极高侦察能力，是唯一能够发现间谍的单位。弹药容量尚待确定。",
       "specialAbilities": [
         "high_vision",
         "detect_spies"
+      ],
+      "reconRange": 8,
+      "concealment": 15,
+      "canDetectSpy": true,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "弹药容量待确认",
+        "侦察范围与隐蔽值为原型估算，待确认"
       ]
     },
     {
@@ -124,6 +154,13 @@
       "description": "机动性、攻击力与防御力均衡的高级地面单位。",
       "specialAbilities": [
         "direct_fire"
+      ],
+      "reconRange": 4,
+      "concealment": 10,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "侦察范围与隐蔽值为原型估算，待确认"
       ]
     },
     {
@@ -150,6 +187,15 @@
         "transport_resources",
         "resupply_adjacent_ground_fuel_ammo",
         "free_ground_attack"
+      ],
+      "reconRange": 4,
+      "concealment": 10,
+      "canDetectSpy": false,
+      "resourceCapacity": -1,
+      "dataGaps": [
+        "资源/运输容量待确认",
+        "侦察范围与隐蔽值为原型估算，待确认",
+        "运输载量、装卸规则与运输资源种类待定义"
       ]
     },
     {
@@ -170,10 +216,18 @@
       "attackRange": 4,
       "canCapture": false,
       "ammoCapacity": 6,
-      "fuelCapacity": 0,
+      "fuelCapacity": -1,
       "description": "远程火力单位。",
       "specialAbilities": [
         "ranged_attack"
+      ],
+      "reconRange": 4,
+      "concealment": 5,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "燃料容量待确认",
+        "侦察范围与隐蔽值为原型估算，待确认"
       ]
     },
     {
@@ -194,10 +248,18 @@
       "attackRange": 4,
       "canCapture": false,
       "ammoCapacity": 10,
-      "fuelCapacity": 0,
+      "fuelCapacity": -1,
       "description": "专用防空单位。",
       "specialAbilities": [
         "anti_air_attack"
+      ],
+      "reconRange": 4,
+      "concealment": 5,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "燃料容量待确认",
+        "侦察范围与隐蔽值为原型估算，待确认"
       ]
     },
     {
@@ -218,12 +280,21 @@
       "attackRange": 6,
       "canCapture": false,
       "ammoCapacity": 20,
-      "fuelCapacity": 0,
+      "fuelCapacity": -1,
       "description": "无法攻击近距离目标；可消耗更多 AP 同时攻击多个单位。",
       "specialAbilities": [
         "long_range_attack",
         "cannot_attack_adjacent",
         "multi_target_attack_extra_ap"
+      ],
+      "reconRange": 4,
+      "concealment": 5,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "燃料容量待确认",
+        "侦察范围与隐蔽值为原型估算，待确认",
+        "多目标上限、每增加目标的额外AP、近距离限制待定义"
       ]
     },
     {
@@ -248,6 +319,13 @@
       "description": "高速空战单位。",
       "specialAbilities": [
         "air_combat"
+      ],
+      "reconRange": 7,
+      "concealment": 15,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "侦察范围与隐蔽值为原型估算，待确认"
       ]
     },
     {
@@ -272,6 +350,13 @@
       "description": "高伤害轰炸单位。",
       "specialAbilities": [
         "bombing_attack"
+      ],
+      "reconRange": 6,
+      "concealment": 10,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "侦察范围与隐蔽值为原型估算，待确认"
       ]
     },
     {
@@ -298,6 +383,15 @@
         "transport_resources",
         "resupply_adjacent_ground_fuel_ammo",
         "free_ground_attack"
+      ],
+      "reconRange": 6,
+      "concealment": 10,
+      "canDetectSpy": false,
+      "resourceCapacity": -1,
+      "dataGaps": [
+        "资源/运输容量待确认",
+        "侦察范围与隐蔽值为原型估算，待确认",
+        "运输载量、装卸规则与运输资源种类待定义"
       ]
     },
     {
@@ -323,6 +417,14 @@
       "specialAbilities": [
         "submerged",
         "only_hit_by_destroyer_cruiser_or_torpedo_plane_torpedoes"
+      ],
+      "reconRange": 4,
+      "concealment": 90,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "侦察范围与隐蔽值为原型估算，待确认",
+        "潜航/反潜命中判定待落地"
       ]
     },
     {
@@ -349,6 +451,15 @@
         "transport_resources",
         "resupply_adjacent_naval_fuel_ammo",
         "free_ground_attack"
+      ],
+      "reconRange": 4,
+      "concealment": 10,
+      "canDetectSpy": false,
+      "resourceCapacity": -1,
+      "dataGaps": [
+        "资源/运输容量待确认",
+        "侦察范围与隐蔽值为原型估算，待确认",
+        "运输载量、装卸规则与运输资源种类待定义"
       ]
     },
     {
@@ -373,6 +484,13 @@
       "description": "续航、防御与远程炮击能力强。",
       "specialAbilities": [
         "long_range_naval_artillery"
+      ],
+      "reconRange": 6,
+      "concealment": 5,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "侦察范围与隐蔽值为原型估算，待确认"
       ]
     },
     {
@@ -392,12 +510,21 @@
       "restAP": 0,
       "attackRange": 1,
       "canCapture": true,
-      "ammoCapacity": 0,
+      "ammoCapacity": -1,
       "fuelCapacity": 0,
       "description": "可强化建筑以提高防御加成，并布置地雷。",
       "specialAbilities": [
         "reinforce_buildings",
         "lay_mines"
+      ],
+      "reconRange": 3,
+      "concealment": 25,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "弹药容量待确认",
+        "侦察范围与隐蔽值为原型估算，待确认",
+        "布雷数量、布雷AP、建筑强化效果与AP、持续时间待定义"
       ]
     },
     {
@@ -422,6 +549,13 @@
       "description": "拥有步兵单位中独特的长射程与高威力子弹攻击。",
       "specialAbilities": [
         "long_range_bullet_attack"
+      ],
+      "reconRange": 5,
+      "concealment": 45,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "侦察范围与隐蔽值为原型估算，待确认"
       ]
     },
     {
@@ -441,12 +575,21 @@
       "restAP": 0,
       "attackRange": 1,
       "canCapture": false,
-      "ammoCapacity": 0,
+      "ammoCapacity": -1,
       "fuelCapacity": 0,
       "description": "具备极高隐蔽性，可以破坏建筑。",
       "specialAbilities": [
         "high_stealth",
         "sabotage_buildings"
+      ],
+      "reconRange": 4,
+      "concealment": 95,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "弹药容量待确认",
+        "侦察范围与隐蔽值为原型估算，待确认",
+        "间谍被发现时的具体检测规则与破坏效果待定义"
       ]
     },
     {
@@ -471,6 +614,13 @@
       "description": "比战车拥有更高伤害与防御，但机动性更低。",
       "specialAbilities": [
         "heavy_direct_fire"
+      ],
+      "reconRange": 3,
+      "concealment": 5,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "侦察范围与隐蔽值为原型估算，待确认"
       ]
     },
     {
@@ -496,6 +646,14 @@
       "specialAbilities": [
         "deploy_to_attack",
         "mobile_mode_cannot_attack"
+      ],
+      "reconRange": 3,
+      "concealment": 0,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "侦察范围与隐蔽值为原型估算，待确认",
+        "机动/驻守形态切换AP与攻击限制待定义"
       ]
     },
     {
@@ -521,6 +679,13 @@
       "specialAbilities": [
         "refuel_aircraft",
         "cannot_attack"
+      ],
+      "reconRange": 6,
+      "concealment": 10,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "侦察范围与隐蔽值为原型估算，待确认"
       ]
     },
     {
@@ -545,6 +710,13 @@
       "description": "只能攻击海军单位，鱼雷伤害高。",
       "specialAbilities": [
         "torpedo_attack_naval_only"
+      ],
+      "reconRange": 7,
+      "concealment": 20,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "侦察范围与隐蔽值为原型估算，待确认"
       ]
     },
     {
@@ -571,6 +743,13 @@
         "host_aircraft",
         "resupply_docked_aircraft_fuel_ammo",
         "cannot_attack"
+      ],
+      "reconRange": 5,
+      "concealment": 5,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "侦察范围与隐蔽值为原型估算，待确认"
       ]
     },
     {
@@ -597,6 +776,13 @@
         "torpedo_attack_consumes_ammo",
         "free_gun_attack",
         "anti_submarine_torpedoes"
+      ],
+      "reconRange": 5,
+      "concealment": 10,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "侦察范围与隐蔽值为原型估算，待确认"
       ]
     },
     {
@@ -623,6 +809,13 @@
         "torpedo_attack_consumes_ammo",
         "free_gun_attack",
         "free_anti_air_attack"
+      ],
+      "reconRange": 6,
+      "concealment": 5,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "侦察范围与隐蔽值为原型估算，待确认"
       ]
     }
   ]
