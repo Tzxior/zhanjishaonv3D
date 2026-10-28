@@ -106,8 +106,9 @@ public class HexBattlefieldDemo : MonoBehaviour
         int value = (q * 37 + r * 19 + q * r * 13) % 100;
         if (value < 8) { terrain = "Water"; color = new Color(0.16f, 0.36f, 0.55f); }
         else if (value < 20) { terrain = "Mountain"; color = new Color(0.43f, 0.45f, 0.46f); }
-        else if (value < 39) { terrain = "Forest"; color = new Color(0.16f, 0.34f, 0.21f); }
-        else if (value < 57) { terrain = "Dryland"; color = new Color(0.63f, 0.53f, 0.34f); }
+        else if (value < 34) { terrain = "Forest"; color = new Color(0.16f, 0.34f, 0.21f); }
+        else if (value < 43) { terrain = "Hill"; color = new Color(0.48f, 0.40f, 0.29f); }
+        else if (value < 58) { terrain = "Dryland"; color = new Color(0.63f, 0.53f, 0.34f); }
         else { terrain = "Grassland"; color = new Color(0.32f, 0.49f, 0.29f); }
     }
 
@@ -150,6 +151,67 @@ public class HexBattlefieldDemo : MonoBehaviour
             case "City": return 10;
             case "Water": return int.MaxValue;
             default: return 20;
+        }
+    }
+
+
+    // Movement points are independent from Action Points (AP).
+    // Infantry: roads/open ground 1, forest/hills 2, mountains 3.
+    // Air units ignore most ordinary terrain costs and blockers.
+    public int GetMovementPointCost(int q, int r, HexUnitClass unitClass)
+    {
+        if (!tilesByCoordinates.TryGetValue(new Vector2Int(q, r), out TileInfo tile))
+            return int.MaxValue;
+        if (unitClass == HexUnitClass.Air) return 1;
+
+        switch (tile.terrain)
+        {
+            case "Road":
+            case "City":
+            case "Dryland":
+            case "Grassland": return 1;
+            case "Forest":
+            case "Hill":
+            case "MountainRoad": return 2;
+            case "Mountain": return 3;
+            case "Water": return int.MaxValue;
+            default: return 1;
+        }
+    }
+
+    public string GetTerrainDisplayName(int q, int r)
+    {
+        if (!tilesByCoordinates.TryGetValue(new Vector2Int(q, r), out TileInfo tile))
+            return "地图外";
+        switch (tile.terrain)
+        {
+            case "Road": return "道路";
+            case "MountainRoad": return "山路";
+            case "Grassland": return "平原";
+            case "Dryland": return "干燥地";
+            case "Forest": return "森林";
+            case "Hill": return "丘陵";
+            case "Mountain": return "山地";
+            case "Water": return "水域";
+            case "City": return "城市";
+            default: return tile.terrain;
+        }
+    }
+
+    public string GetTerrainBonusDescription(int q, int r)
+    {
+        if (!tilesByCoordinates.TryGetValue(new Vector2Int(q, r), out TileInfo tile))
+            return "无";
+        switch (tile.terrain)
+        {
+            case "Forest": return "防御 +10；地面移动消耗 2";
+            case "Hill": return "防御 +15；地面移动消耗 2";
+            case "Mountain": return "防御 +20；地面移动消耗 3";
+            case "MountainRoad": return "防御 +20；地面移动消耗 2";
+            case "City": return "防御 +40；可占领改变归属";
+            case "Road": return "地面移动消耗 1；AP 成本按道路规则";
+            case "Water": return "地面单位不可进入；空军可通过";
+            default: return "无额外防御加成；基础移动消耗 1";
         }
     }
 
