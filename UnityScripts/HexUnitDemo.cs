@@ -940,7 +940,7 @@ public class HexUnitDemo : MonoBehaviour
     {
         switch(category)
         {
-            case "ground_vehicle": return "地面车辆";
+            case "ground_vehicle": return "战车";
             case "artillery": return "炮兵";
             case "air": return "空军";
             case "naval": return "海军";
