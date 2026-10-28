@@ -154,7 +154,7 @@
     },
     {
       "id": "self_propelled_gun",
-      "unitName": "自行炮",
+      "unitName": "自走炮",
       "unitCategory": "artillery",
       "unitClass": 1,
       "maxHP": 100,
