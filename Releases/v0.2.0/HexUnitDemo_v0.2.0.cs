@@ -582,6 +582,7 @@ public class HexUnitDemo : MonoBehaviour
     {
         foreach (Vector2Int point in path)
         {
+            if(unit.unitId=="fortress") unit.fortressGarrisoned=false;
             unit.currentDirection = GetDirectionForMove(point.x - unit.q, point.y - unit.r);
             unit.q = point.x;
             unit.r = point.y;
