@@ -36,6 +36,7 @@ public class HexUnitDemo : MonoBehaviour
         public bool canDetectSpy = false;
         [Min(-1)] public int resourceCapacity = -1;
         public string[] dataGaps = new string[0];
+        public string[] actions = new string[0];
         [Min(1)] public int maxHP=100;
         [Min(0)] public int attackPower=20;
         public HexAttackType attackType=HexAttackType.Bullet;
@@ -121,6 +122,7 @@ public class HexUnitDemo : MonoBehaviour
         public string description;
         public string[] specialAbilities;
         public string[] dataGaps;
+        public string[] actions;
         public int reconRange=-1, concealment=-1, resourceCapacity=-1;
         public bool canDetectSpy;
         public HexAttackType attackType;
@@ -276,9 +278,37 @@ public class HexUnitDemo : MonoBehaviour
     private void Update()
     {
         AnimateUnits();
+        UpdateUnitVisibility();
         if (WasRightClickPressed()) { DeselectAll(); return; }
         if (!simulationRunning && WasLeftClickPressed() && !PointerOverHud())
             HandleMapClick();
+    }
+
+    private void UpdateUnitVisibility()
+    {
+        // Player-side visibility: a red unit is revealed only when a blue observer
+        // has enough reconnaissance to beat its concealment and it is within recon range.
+        foreach(UnitInfo target in units)
+        {
+            if(target.renderer == null || target.team == 0) continue;
+            bool detected = false;
+            foreach(UnitInfo observer in units)
+            {
+                if(observer.team != 0 || observer.reconRange < 0 || target.concealment < 0) continue;
+                if(observer.reconRange < target.concealment) continue;
+                int distance = HexDistance(new Vector2Int(observer.q, observer.r), new Vector2Int(target.q, target.r));
+                if(distance <= observer.reconRange) { detected = true; break; }
+            }
+            target.renderer.enabled = detected;
+            if(!detected && selectedUnit == target)
+            {
+                selectedUnit = null;
+                attackMode = false;
+                moveMode = false;
+                ClearHighlights();
+                statusMessage = "敌方单位已脱离我方侦察范围。";
+            }
+        }
     }
 
     private void LateUpdate()
@@ -347,6 +377,8 @@ public class HexUnitDemo : MonoBehaviour
         if(!Physics.Raycast(ray,out RaycastHit hit,1000f))return;
         if(!TryReadHexCoordinates(hit.collider.gameObject.name,out int q,out int r))return;
         UnitInfo clicked=FindUnitAt(q,r);
+        if(clicked!=null && clicked.team==1 && clicked.renderer!=null && !clicked.renderer.enabled)
+            clicked=null;
         if(attackMode&&selectedUnit!=null&&clicked!=null&&clicked.team==1){ExecutePlayerAttack(clicked);return;}
         if(clicked!=null)
         {
@@ -401,7 +433,7 @@ public class HexUnitDemo : MonoBehaviour
                 unitCategory=string.IsNullOrWhiteSpace(p.unitCategory)?"infantry":p.unitCategory,
                 ammoCapacity=p.ammoCapacity,fuelCapacity=p.fuelCapacity,resourceCapacity=p.resourceCapacity,
                 reconRange=p.reconRange,concealment=p.concealment,canDetectSpy=p.canDetectSpy,
-                description=p.description,specialAbilities=p.specialAbilities,dataGaps=p.dataGaps,
+                description=p.description,specialAbilities=p.specialAbilities,dataGaps=p.dataGaps,actions=p.actions,
                 hp=Mathf.Max(1,p.maxHP),maxHp=Mathf.Max(1,p.maxHP),
                 baseAttackPower=Mathf.Max(0,p.attackPower),attack=Mathf.Max(0,p.attackPower),experience=0,rank=0,attackType=p.attackType,
                 bulletDefense=Mathf.Max(0,p.bulletDefense),explosionDefense=Mathf.Max(0,p.explosionDefense),
@@ -963,6 +995,8 @@ public class HexUnitDemo : MonoBehaviour
             GUILayout.Label($"侦察：{(selectedUnit.reconRange < 0 ? "待确认" : selectedUnit.reconRange + " 格")}　隐蔽：{(selectedUnit.concealment < 0 ? "待确认" : selectedUnit.concealment + "/100")}　侦察间谍：{(selectedUnit.canDetectSpy ? "可以" : "不可以")}");
             if(!string.IsNullOrWhiteSpace(selectedUnit.description))
                 GUILayout.Label($"定位：{selectedUnit.description}");
+            if(selectedUnit.actions!=null && selectedUnit.actions.Length>0)
+                GUILayout.Label("行动配置：" + string.Join("；", selectedUnit.actions));
             GUILayout.Label($"生命：{selectedUnit.hp}/{selectedUnit.maxHp}（{100f*selectedUnit.hp/Mathf.Max(1,selectedUnit.maxHp):0}%）");
             GUILayout.Label($"经验：{selectedUnit.experience}/5000　军阶：{RankName(selectedUnit.rank)}　升阶加成：生命 +{selectedUnit.rank*10}，攻击 +{selectedUnit.rank*10}%");
             GUILayout.Label($"攻击力：{selectedUnit.attack}　攻击类型：{AttackTypeName(selectedUnit.attackType)}　范围：{selectedUnit.attackRange}");
@@ -976,7 +1010,7 @@ public class HexUnitDemo : MonoBehaviour
                 GUI.enabled=ready&&!selectedUnit.hasMovedThisActivation&&!attackMode;
                 if(GUILayout.Button("移动（可选；不结束行动）"))
                 {moveMode=true;attackMode=false;RefreshMovementHighlights();statusMessage="点击青色地块移动；移动后仍需执行非移动行动。";}
-                GUI.enabled=ready;
+                GUI.enabled=ready && selectedUnit.attack > 0 && selectedUnit.attackAP > 0;
                 if(GUILayout.Button($"攻击（{selectedUnit.attackAP} AP；范围 {selectedUnit.attackRange}）"))BeginAttackMode();
                 GUI.enabled=ready&&!attackMode&&battlefield.IsCity(selectedUnit.q,selectedUnit.r)&&
                     battlefield.GetCityOwner(selectedUnit.q,selectedUnit.r)!=0&&selectedUnit.canCapture;
