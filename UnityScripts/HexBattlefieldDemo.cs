@@ -209,19 +209,19 @@ public class HexBattlefieldDemo : MonoBehaviour
             case "Road":
                 AddTerrainPart(tile, PrimitiveType.Cube, "RoadSurface",
                     new Vector3(0f, top + 0.018f, 0f), new Vector3(1.30f, 0.035f, 0.34f) * size,
-                    new Color(0.28f, 0.28f, 0.26f), shader, new Vector3(0f, 0f, 30f));
+                    new Color(0.28f, 0.28f, 0.26f), shader, new Vector3(0f, 30f, 0f));
                 AddTerrainPart(tile, PrimitiveType.Cube, "RoadCenterMark",
                     new Vector3(0f, top + 0.038f, 0f), new Vector3(0.72f, 0.008f, 0.025f) * size,
-                    new Color(0.79f, 0.73f, 0.54f), shader, new Vector3(0f, 0f, 30f));
+                    new Color(0.79f, 0.73f, 0.54f), shader, new Vector3(0f, 30f, 0f));
                 break;
 
             case "MountainRoad":
                 AddTerrainPart(tile, PrimitiveType.Cube, "MountainRoadSurface",
                     new Vector3(0f, top + 0.022f, 0f), new Vector3(1.26f, 0.045f, 0.36f) * size,
-                    new Color(0.35f, 0.29f, 0.23f), shader, new Vector3(0f, 0f, 30f));
+                    new Color(0.35f, 0.29f, 0.23f), shader, new Vector3(0f, 30f, 0f));
                 AddTerrainPart(tile, PrimitiveType.Cube, "MountainRoadStripe",
                     new Vector3(0f, top + 0.048f, 0f), new Vector3(0.72f, 0.008f, 0.025f) * size,
-                    new Color(0.70f, 0.61f, 0.45f), shader, new Vector3(0f, 0f, 30f));
+                    new Color(0.70f, 0.61f, 0.45f), shader, new Vector3(0f, 30f, 0f));
                 for (int i = 0; i < 2; i++)
                     AddTerrainPart(tile, PrimitiveType.Sphere, "RoadsideRock",
                         new Vector3((i == 0 ? -0.34f : 0.34f) * size, top + 0.06f * size, (i == 0 ? 0.25f : -0.25f) * size),
