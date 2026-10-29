@@ -45,7 +45,7 @@ public class HexBattlefieldDemo : MonoBehaviour
         public Color baseColor;
         public bool isReachable;
         public bool isActionTarget;
-        public int ownerTeam = -1; // -1 neutral, 0 blue, 1 red
+        public int ownerTeam = -1; // -1 neutral, 0 player faction, 1 opponent faction
     }
 
     private void Start()
@@ -165,12 +165,12 @@ public class HexBattlefieldDemo : MonoBehaviour
                 {
                     float x = (i - 1) * 0.27f * size;
                     float z = (i == 1 ? 0.19f : -0.17f) * size;
-                    float height = (i == 1 ? 0.48f : 0.38f) * size;
+                    float height = (i == 1 ? 0.48f : 0.38f);
                     AddTerrainPart(tile, PrimitiveType.Cylinder, "TreeTrunk",
-                        new Vector3(x, top + height * 0.22f, z), new Vector3(0.065f, height * 0.30f, 0.065f) * size,
+                        new Vector3(x, top + height * 0.22f * size, z), new Vector3(0.065f, height * 0.30f, 0.065f) * size,
                         soil, shader);
                     AddTerrainPart(tile, PrimitiveType.Sphere, "TreeCanopy",
-                        new Vector3(x, top + height * 0.68f, z), new Vector3(0.25f, height, 0.23f) * size,
+                        new Vector3(x, top + height * 0.68f * size, z), new Vector3(0.25f, height, 0.23f) * size,
                         (i == 1 ? foliageLight : foliage), shader);
                 }
                 break;
