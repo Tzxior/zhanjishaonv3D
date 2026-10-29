@@ -62,6 +62,8 @@ public class HexBuildingEconomy : MonoBehaviour
         public int ownerTeam;
         public GameObject marker;
         public TextMesh label;
+        public Renderer factionBannerRenderer;
+        public Renderer factionBaseRenderer;
         public ProductionOrder activeOrder;
     }
 
@@ -105,6 +107,9 @@ public class HexBuildingEconomy : MonoBehaviour
     private HexBattlefieldDemo battlefield;
     private HexUnitDemo unitController;
     private bool initialized;
+    private Color playerFactionColor = new Color(0.86f, 0.16f, 0.21f, 1f);
+    private Color opponentFactionColor = new Color(0.16f, 0.39f, 0.86f, 1f);
+    private readonly Dictionary<Color, Material> generatedMaterials = new Dictionary<Color, Material>();
     private bool resultWasReported;
 
     public int PlayerTeamId => 0;
@@ -216,32 +221,178 @@ public class HexBuildingEconomy : MonoBehaviour
         float size = battlefield.hexSize;
         return new Vector3(
             1.5f * size * q,
-            battlefield.tileThickness * 0.5f + 0.26f,
+            battlefield.tileThickness * 0.5f + 0.012f,
             Mathf.Sqrt(3f) * size * (r + q * 0.5f));
+    }
+
+    private Material GetOrCreateMaterial(Color color, Shader shader)
+    {
+        if (generatedMaterials.TryGetValue(color, out Material cached) && cached != null)
+            return cached;
+        Material material = new Material(shader) { color = color };
+        generatedMaterials[color] = material;
+        return material;
+    }
+
+    private Renderer AddBuildingPart(Transform parent, PrimitiveType shape, string partName,
+        Vector3 localPosition, Vector3 localScale, Color color, Shader shader, Vector3 localEuler = default)
+    {
+        GameObject part = GameObject.CreatePrimitive(shape);
+        part.name = partName;
+        part.transform.SetParent(parent, false);
+        part.transform.localPosition = localPosition;
+        part.transform.localScale = localScale;
+        part.transform.localEulerAngles = localEuler;
+        Collider collider = part.GetComponent<Collider>();
+        if (collider != null) collider.enabled = false;
+        Renderer renderer = part.GetComponent<Renderer>();
+        if (renderer != null) renderer.sharedMaterial = GetOrCreateMaterial(color, shader);
+        return renderer;
+    }
+
+    private void CreateBuildingSilhouette(BuildingState building, Shader shader)
+    {
+        Transform root = building.marker.transform;
+        Color concrete = new Color(0.46f, 0.48f, 0.49f);
+        Color roof = new Color(0.24f, 0.27f, 0.30f);
+        Color wall = new Color(0.61f, 0.57f, 0.48f);
+        Color industrial = new Color(0.36f, 0.40f, 0.43f);
+        Color metal = new Color(0.68f, 0.72f, 0.73f);
+
+        switch (building.type)
+        {
+            case HexBuildingType.Headquarters:
+                AddBuildingPart(root, PrimitiveType.Cube, "CommandHall",
+                    new Vector3(0f, 0.24f, 0f), new Vector3(0.48f, 0.48f, 0.42f), wall, shader);
+                AddBuildingPart(root, PrimitiveType.Cube, "CommandTower",
+                    new Vector3(0f, 0.57f, 0f), new Vector3(0.24f, 0.28f, 0.25f), roof, shader);
+                AddBuildingPart(root, PrimitiveType.Cylinder, "RadarMast",
+                    new Vector3(0.05f, 0.82f, -0.02f), new Vector3(0.025f, 0.18f, 0.025f), metal, shader);
+                AddBuildingPart(root, PrimitiveType.Sphere, "RadarDish",
+                    new Vector3(0.05f, 0.98f, -0.02f), new Vector3(0.15f, 0.045f, 0.15f), metal, shader);
+                break;
+
+            case HexBuildingType.LargeCity:
+                AddBuildingPart(root, PrimitiveType.Cube, "CityTowerA",
+                    new Vector3(-0.20f, 0.32f, 0f), new Vector3(0.25f, 0.64f, 0.25f), concrete, shader);
+                AddBuildingPart(root, PrimitiveType.Cube, "CityTowerB",
+                    new Vector3(0.12f, 0.23f, -0.10f), new Vector3(0.28f, 0.46f, 0.26f), wall, shader);
+                AddBuildingPart(root, PrimitiveType.Cube, "CityBlockC",
+                    new Vector3(0.16f, 0.13f, 0.20f), new Vector3(0.25f, 0.26f, 0.20f), roof, shader);
+                break;
+
+            case HexBuildingType.SmallCity:
+                AddBuildingPart(root, PrimitiveType.Cube, "SmallCityBlockA",
+                    new Vector3(-0.14f, 0.13f, 0f), new Vector3(0.30f, 0.26f, 0.27f), wall, shader);
+                AddBuildingPart(root, PrimitiveType.Cube, "SmallCityBlockB",
+                    new Vector3(0.16f, 0.18f, 0.12f), new Vector3(0.24f, 0.36f, 0.22f), concrete, shader);
+                break;
+
+            case HexBuildingType.Village:
+                for (int i = 0; i < 3; i++)
+                {
+                    float x = (i - 1) * 0.23f;
+                    float z = i % 2 == 0 ? 0.12f : -0.13f;
+                    AddBuildingPart(root, PrimitiveType.Cube, "VillageHouse",
+                        new Vector3(x, 0.12f, z), new Vector3(0.18f, 0.22f, 0.18f), wall, shader);
+                    AddBuildingPart(root, PrimitiveType.Cylinder, "VillageRoof",
+                        new Vector3(x, 0.25f, z), new Vector3(0.14f, 0.08f, 0.14f), new Color(0.43f, 0.22f, 0.16f), shader);
+                }
+                break;
+
+            case HexBuildingType.Arsenal:
+                AddBuildingPart(root, PrimitiveType.Cube, "ArsenalWarehouse",
+                    new Vector3(0f, 0.18f, 0f), new Vector3(0.58f, 0.36f, 0.42f), industrial, shader);
+                AddBuildingPart(root, PrimitiveType.Cube, "ArsenalRoof",
+                    new Vector3(0f, 0.39f, 0f), new Vector3(0.62f, 0.08f, 0.46f), roof, shader);
+                for (int i = 0; i < 2; i++)
+                    AddBuildingPart(root, PrimitiveType.Cube, "AmmoCrate",
+                        new Vector3(-0.22f + i * 0.42f, 0.08f, 0.27f), new Vector3(0.15f, 0.16f, 0.12f), wall, shader);
+                break;
+
+            case HexBuildingType.TankFactory:
+                AddBuildingPart(root, PrimitiveType.Cube, "TankFactoryHall",
+                    new Vector3(0f, 0.20f, 0f), new Vector3(0.62f, 0.40f, 0.46f), industrial, shader);
+                AddBuildingPart(root, PrimitiveType.Cube, "TankFactoryRoof",
+                    new Vector3(0f, 0.43f, 0f), new Vector3(0.66f, 0.08f, 0.50f), roof, shader);
+                AddBuildingPart(root, PrimitiveType.Cylinder, "FactoryStack",
+                    new Vector3(0.20f, 0.58f, -0.10f), new Vector3(0.06f, 0.24f, 0.06f), metal, shader);
+                AddBuildingPart(root, PrimitiveType.Cube, "TankSilhouette",
+                    new Vector3(-0.02f, 0.08f, 0.31f), new Vector3(0.34f, 0.10f, 0.13f), new Color(0.20f, 0.28f, 0.18f), shader);
+                break;
+
+            case HexBuildingType.ArtilleryFactory:
+                AddBuildingPart(root, PrimitiveType.Cube, "ArtilleryHall",
+                    new Vector3(-0.05f, 0.18f, 0f), new Vector3(0.53f, 0.36f, 0.42f), industrial, shader);
+                AddBuildingPart(root, PrimitiveType.Cylinder, "ArtilleryBarrel",
+                    new Vector3(0.23f, 0.16f, 0.18f), new Vector3(0.055f, 0.28f, 0.055f), metal, shader, new Vector3(0f, 0f, -65f));
+                break;
+
+            case HexBuildingType.Shipyard:
+                AddBuildingPart(root, PrimitiveType.Cube, "ShipyardDock",
+                    new Vector3(0f, 0.06f, -0.10f), new Vector3(0.76f, 0.12f, 0.28f), new Color(0.40f, 0.30f, 0.22f), shader);
+                AddBuildingPart(root, PrimitiveType.Cube, "ShipHull",
+                    new Vector3(0.06f, 0.16f, 0.18f), new Vector3(0.50f, 0.14f, 0.18f), new Color(0.20f, 0.31f, 0.36f), shader, new Vector3(0f, 0f, -12f));
+                AddBuildingPart(root, PrimitiveType.Cube, "ShipBridge",
+                    new Vector3(-0.04f, 0.28f, 0.18f), new Vector3(0.16f, 0.14f, 0.14f), concrete, shader);
+                break;
+
+            case HexBuildingType.Airport:
+                AddBuildingPart(root, PrimitiveType.Cube, "Runway",
+                    new Vector3(0f, 0.035f, 0f), new Vector3(0.82f, 0.055f, 0.28f), roof, shader, new Vector3(0f, 0f, -18f));
+                AddBuildingPart(root, PrimitiveType.Cube, "RunwayMarking",
+                    new Vector3(0f, 0.065f, 0f), new Vector3(0.58f, 0.008f, 0.025f), metal, shader, new Vector3(0f, 0f, -18f));
+                AddBuildingPart(root, PrimitiveType.Cube, "AircraftBody",
+                    new Vector3(0.04f, 0.16f, 0.20f), new Vector3(0.12f, 0.08f, 0.42f), metal, shader, new Vector3(0f, 0f, 15f));
+                AddBuildingPart(root, PrimitiveType.Cube, "AircraftWings",
+                    new Vector3(0.04f, 0.16f, 0.20f), new Vector3(0.40f, 0.035f, 0.10f), concrete, shader);
+                break;
+
+            case HexBuildingType.IronMine:
+                AddBuildingPart(root, PrimitiveType.Sphere, "IronOreA",
+                    new Vector3(-0.17f, 0.13f, 0.03f), new Vector3(0.32f, 0.26f, 0.29f), new Color(0.27f, 0.29f, 0.30f), shader);
+                AddBuildingPart(root, PrimitiveType.Sphere, "IronOreB",
+                    new Vector3(0.11f, 0.11f, 0.14f), new Vector3(0.26f, 0.22f, 0.25f), new Color(0.39f, 0.31f, 0.27f), shader);
+                AddBuildingPart(root, PrimitiveType.Cube, "MineFrame",
+                    new Vector3(0.22f, 0.32f, -0.18f), new Vector3(0.06f, 0.45f, 0.06f), metal, shader);
+                break;
+
+            case HexBuildingType.AluminiumMine:
+                AddBuildingPart(root, PrimitiveType.Sphere, "AluminiumOreA",
+                    new Vector3(-0.14f, 0.12f, 0.03f), new Vector3(0.30f, 0.24f, 0.28f), new Color(0.65f, 0.70f, 0.74f), shader);
+                AddBuildingPart(root, PrimitiveType.Sphere, "AluminiumOreB",
+                    new Vector3(0.12f, 0.11f, 0.14f), new Vector3(0.25f, 0.22f, 0.23f), new Color(0.80f, 0.82f, 0.83f), shader);
+                AddBuildingPart(root, PrimitiveType.Cube, "OreConveyor",
+                    new Vector3(0.23f, 0.25f, -0.16f), new Vector3(0.07f, 0.28f, 0.07f), roof, shader);
+                break;
+        }
     }
 
     private void CreateMarker(BuildingState building)
     {
-        GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        marker.name = $"Building_{building.type}_{building.q}_{building.r}";
-        marker.transform.SetParent(transform, false);
-        marker.transform.localPosition = TilePosition(building.q, building.r);
-        marker.transform.localScale = new Vector3(0.34f, 0.16f, 0.34f);
-        Collider collider = marker.GetComponent<Collider>();
-        if (collider != null) Destroy(collider);
-
         Shader shader = Shader.Find("Universal Render Pipeline/Lit");
         if (shader == null) shader = Shader.Find("Standard");
-        if (shader != null)
-        {
-            Material material = new Material(shader);
-            material.color = OwnerColor(building.ownerTeam);
-            marker.GetComponent<Renderer>().sharedMaterial = material;
-        }
+        if (shader == null) shader = Shader.Find("Unlit/Color");
+        if (shader == null) { Debug.LogError("HexBuildingEconomy: No compatible shader."); return; }
+
+        GameObject marker = new GameObject($"Building_{building.type}_{building.q}_{building.r}");
+        marker.transform.SetParent(transform, false);
+        marker.transform.localPosition = TilePosition(building.q, building.r);
+        marker.transform.localScale = Vector3.one;
+        building.marker = marker;
+
+        building.factionBaseRenderer = AddBuildingPart(marker.transform, PrimitiveType.Cylinder, "OwnershipBase",
+            new Vector3(0f, 0.025f, 0f), new Vector3(0.70f, 0.035f, 0.70f), OwnerColor(building.ownerTeam), shader);
+        CreateBuildingSilhouette(building, shader);
+
+        AddBuildingPart(marker.transform, PrimitiveType.Cylinder, "FactionFlagPole",
+            new Vector3(0.39f, 0.40f, -0.20f), new Vector3(0.018f, 0.40f, 0.018f), new Color(0.24f, 0.25f, 0.25f), shader);
+        building.factionBannerRenderer = AddBuildingPart(marker.transform, PrimitiveType.Cube, "FactionBanner",
+            new Vector3(0.51f, 0.62f, -0.20f), new Vector3(0.24f, 0.13f, 0.035f), OwnerColor(building.ownerTeam), shader);
 
         GameObject labelObject = new GameObject("BuildingLabel");
         labelObject.transform.SetParent(marker.transform, false);
-        labelObject.transform.localPosition = new Vector3(0f, 1.35f, 0f);
+        labelObject.transform.localPosition = new Vector3(0f, 1.06f, 0f);
         labelObject.transform.localScale = Vector3.one * 0.18f;
         TextMesh label = labelObject.AddComponent<TextMesh>();
         label.text = ShortName(building.type);
@@ -250,17 +401,22 @@ public class HexBuildingEconomy : MonoBehaviour
         label.anchor = TextAnchor.MiddleCenter;
         label.alignment = TextAlignment.Center;
         label.color = OwnerColor(building.ownerTeam);
-
-        building.marker = marker;
         building.label = label;
+    }
+
+    public void SetFactionColors(Color playerColor, Color opponentColor)
+    {
+        playerFactionColor = playerColor;
+        opponentFactionColor = opponentColor;
+        foreach (BuildingState building in buildings) RefreshMarker(building);
     }
 
     private Color OwnerColor(int owner)
     {
         switch (owner)
         {
-            case 0: return new Color(0.22f, 0.55f, 0.95f); // Blue / player
-            case 1: return new Color(0.88f, 0.27f, 0.23f); // Red
+            case 0: return playerFactionColor;
+            case 1: return opponentFactionColor;
             case 2: return new Color(0.13f, 0.14f, 0.17f); // Black
             case 3: return new Color(0.19f, 0.58f, 0.31f); // Green
             case 4: return new Color(0.88f, 0.68f, 0.20f); // Yellow
@@ -368,14 +524,13 @@ public class HexBuildingEconomy : MonoBehaviour
 
     private void RefreshMarker(BuildingState building)
     {
-        if (building.marker != null)
-        {
-            Renderer renderer = building.marker.GetComponent<Renderer>();
-            if (renderer != null && renderer.sharedMaterial != null)
-                renderer.sharedMaterial.color = OwnerColor(building.ownerTeam);
-        }
+        Color ownerColor = OwnerColor(building.ownerTeam);
+        if (building.factionBaseRenderer != null && building.factionBaseRenderer.sharedMaterial != null)
+            building.factionBaseRenderer.sharedMaterial.color = ownerColor;
+        if (building.factionBannerRenderer != null && building.factionBannerRenderer.sharedMaterial != null)
+            building.factionBannerRenderer.sharedMaterial.color = ownerColor;
         if (building.label != null)
-            building.label.color = OwnerColor(building.ownerTeam);
+            building.label.color = ownerColor;
     }
 
     private int CountOwned(int team, HexBuildingType type)
