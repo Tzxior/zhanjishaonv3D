@@ -1,6 +1,6 @@
 {
   "schemaVersion": 7,
-  "notes": "Schema v7 updated from the user's latest uploaded 单位信息(1).csv. Combat stats, movement, default range, ammo/fuel/cargo, reconnaissance/concealment and production costs match this table. Each non-empty action column is preserved as action_1/action_2/action_3 with parsed AP cost, damage multiplier/type, ammo consumption and min/max range. Explicit 距离x-y values override the unit default; building capture and stance switch use 0-0; other actions without explicit distance use 1-单位射程. Two栖 maps to the existing Naval movement enum because this prototype does not yet define a distinct amphibious class.",
+  "notes": "Schema v7 updated from the user's latest uploaded 单位信息(1).csv. Combat stats, movement, default range, ammo/fuel/cargo, reconnaissance/concealment and production costs match this table. Each non-empty action column is preserved as action_1/action_2/action_3 with parsed AP cost, damage multiplier/type, ammo consumption and min/max range. Explicit 距离x-y values override the unit default; building capture and stance switch use 0-0; other actions without explicit distance use 1-单位射程. 两栖 maps to the existing Naval movement enum because this prototype does not yet define a distinct amphibious class.",
   "units": [
     {
       "id": "infantry",
