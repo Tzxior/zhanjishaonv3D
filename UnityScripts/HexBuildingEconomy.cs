@@ -1127,12 +1127,12 @@ public class HexBuildingEconomy : MonoBehaviour
             !IsFactory(building.type)) return;
 
         int occupiedTeam;
-        string occupiedName, occupiedCategory;
+        string unitAtTileName, unitAtTileCategory;
         bool occupied = driver != null &&
-            driver.TryGetUnitAtTile(q, r, out occupiedTeam, out occupiedName, out occupiedCategory);
+            driver.TryGetUnitAtTile(q, r, out occupiedTeam, out unitAtTileName, out unitAtTileCategory);
         if (occupied)
         {
-            GUILayout.Label("驻扎单位：" + occupiedName + "；工厂被占用，不能发起新生产。");
+            GUILayout.Label("驻扎单位：" + unitAtTileName + "；工厂被占用，不能发起新生产。");
             return;
         }
         if (building.activeOrder != null && building.activeOrder.profile != null)
