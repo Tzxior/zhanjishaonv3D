@@ -144,6 +144,21 @@ public class HexBuildingEconomy : MonoBehaviour
             InitializeForBattlefield(GetComponent<HexBattlefieldDemo>(), GetComponent<HexUnitDemo>());
     }
 
+    private Camera markerCamera;
+
+    private void LateUpdate()
+    {
+        if (markerCamera == null) markerCamera = Camera.main;
+        if (markerCamera == null) return;
+        foreach (BuildingState building in buildings)
+        {
+            if (building == null || building.label == null) continue;
+            Vector3 toCamera = markerCamera.transform.position - building.label.transform.position;
+            if (toCamera.sqrMagnitude > 0.001f)
+                building.label.transform.rotation = Quaternion.LookRotation(toCamera, Vector3.up);
+        }
+    }
+
     private void OnDestroy()
     {
         foreach (BuildingState building in buildings)
