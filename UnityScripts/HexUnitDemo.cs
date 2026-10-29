@@ -173,6 +173,18 @@ public class HexUnitDemo : MonoBehaviour
         public Transform actionHaloTransform;
         public LineRenderer actionHalo;
         public float damageFlashUntil;
+        public GameObject statusBarsRoot;
+        public Renderer healthBarFill;
+        public Renderer ammoBarFill;
+        public Renderer fuelBarFill;
+    }
+
+    private sealed class InitialQueueActor
+    {
+        public int team;
+        public UnitInfo unit;
+        public Vector2Int building;
+        public bool isBuilding;
     }
 
     private class PathNode
@@ -197,7 +209,17 @@ public class HexUnitDemo : MonoBehaviour
     private readonly Dictionary<Vector2Int, PathNode> currentPaths = new Dictionary<Vector2Int, PathNode>();
 
     private UnitInfo selectedUnit;
+    private int selectedBuildingQ = -1;
+    private int selectedBuildingR = -1;
     private UnitInfo currentlyActingUnit;
+    private Vector2Int[] levelOneBluePositions;
+    private Vector2Int[] levelOneRedPositions;
+    private string[] levelOneBlueProfileIds;
+    private string[] levelOneRedProfileIds;
+    private int levelOneMapColumns = 9;
+    private int levelOneMapRows = 9;
+    private bool levelDefaultsCaptured;
+    private int activeLevelIndex;
     private Camera mapCamera;
     private Dictionary<string, Sprite[]> blueAnimations;
     private Dictionary<string, Sprite[]> redAnimations;
@@ -265,11 +287,11 @@ public class HexUnitDemo : MonoBehaviour
         LoadUnitProfileDatabase();
         SpawnStartingUnits(blueStartingPositions, blueUnitProfiles, blueStartingProfileIds, 0, blueAnimations);
         SpawnStartingUnits(redStartingPositions, redUnitProfiles, redStartingProfileIds, 1, redAnimations);
-        InitializeUniqueActionNodes();
 
         buildingEconomy = GetComponent<HexBuildingEconomy>();
         if (buildingEconomy == null) buildingEconomy = gameObject.AddComponent<HexBuildingEconomy>();
         buildingEconomy.InitializeForBattlefield(battlefield, this);
+        InitializeUniqueActionNodes();
 
         gameFlowController = GetComponent<HexGameFlowController>();
         if (gameFlowController == null) gameFlowController = gameObject.AddComponent<HexGameFlowController>();
@@ -352,6 +374,61 @@ public class HexUnitDemo : MonoBehaviour
         }
     }
 
+    public void ConfigureLevel(int levelIndex)
+    {
+        if (!levelDefaultsCaptured)
+        {
+            levelOneBluePositions = (Vector2Int[])blueStartingPositions.Clone();
+            levelOneRedPositions = (Vector2Int[])redStartingPositions.Clone();
+            levelOneBlueProfileIds = (string[])blueStartingProfileIds.Clone();
+            levelOneRedProfileIds = (string[])redStartingProfileIds.Clone();
+            levelOneMapColumns = battlefield != null ? battlefield.columns : 9;
+            levelOneMapRows = battlefield != null ? battlefield.rows : 9;
+            levelDefaultsCaptured = true;
+        }
+
+        activeLevelIndex = Mathf.Max(0, levelIndex);
+        if (buildingEconomy == null) buildingEconomy = GetComponent<HexBuildingEconomy>();
+        if (activeLevelIndex <= 0)
+        {
+            blueStartingPositions = (Vector2Int[])levelOneBluePositions.Clone();
+            redStartingPositions = (Vector2Int[])levelOneRedPositions.Clone();
+            blueStartingProfileIds = (string[])levelOneBlueProfileIds.Clone();
+            redStartingProfileIds = (string[])levelOneRedProfileIds.Clone();
+            if (buildingEconomy != null) buildingEconomy.ConfigureLevel(0);
+            if (battlefield != null) battlefield.RebuildMap(levelOneMapColumns, levelOneMapRows);
+            return;
+        }
+
+        blueStartingPositions = new[]
+        {
+            new Vector2Int(1, 1), new Vector2Int(1, 5), new Vector2Int(2, 6),
+            new Vector2Int(3, 2), new Vector2Int(3, 6), new Vector2Int(4, 4),
+            new Vector2Int(4, 6), new Vector2Int(4, 7), new Vector2Int(3, 8),
+            new Vector2Int(2, 7), new Vector2Int(1, 8), new Vector2Int(2, 9), new Vector2Int(3, 9)
+        };
+        blueStartingProfileIds = new[]
+        {
+            "infantry", "heavy_infantry", "engineer", "sniper", "medic", "tank",
+            "self_propelled_gun", "anti_air", "apc", "fighter", "transport_aircraft", "rockets", "scout"
+        };
+        redStartingPositions = new[]
+        {
+            new Vector2Int(9, 9), new Vector2Int(9, 8), new Vector2Int(8, 6),
+            new Vector2Int(7, 6), new Vector2Int(7, 4), new Vector2Int(8, 5),
+            new Vector2Int(8, 7), new Vector2Int(7, 9), new Vector2Int(10, 8),
+            new Vector2Int(10, 9), new Vector2Int(9, 3), new Vector2Int(9, 2), new Vector2Int(10, 2)
+        };
+        redStartingProfileIds = new[]
+        {
+            "heavy_infantry", "infantry", "tank", "engineer", "rockets", "sniper",
+            "heavy_tank", "self_propelled_gun", "anti_air", "bomber",
+            "transport_aircraft", "destroyer", "cruiser"
+        };
+        if (buildingEconomy != null) buildingEconomy.ConfigureLevel(1);
+        if (battlefield != null) battlefield.RebuildMap(11, 11);
+    }
+
     public void ResetForNewMatch()
     {
         StopAllCoroutines();
@@ -361,12 +438,11 @@ public class HexUnitDemo : MonoBehaviour
         foreach (UnitInfo unit in units)
         {
             if (unit == null) continue;
-            if (unit.visual != null) Destroy(unit.visual.gameObject);
-            if (unit.factionMarker != null) Destroy(unit.factionMarker);
-            if (unit.actionHaloTransform != null) Destroy(unit.actionHaloTransform.gameObject);
+            DestroyUnitPresentation(unit);
         }
         units.Clear();
         selectedUnit = null;
+        selectedBuildingQ = selectedBuildingR = -1;
         currentlyActingUnit = null;
         hasSelectedTile = false;
         moveMode = attackMode = supportMode = transportMode = false;
@@ -800,6 +876,15 @@ public class HexUnitDemo : MonoBehaviour
                 if (toCamera.sqrMagnitude > 0.001f)
                     unit.visual.rotation = Quaternion.LookRotation(toCamera, Vector3.up);
             }
+            if (unit.statusBarsRoot != null)
+            {
+                unit.statusBarsRoot.transform.localPosition = HexToLocalPosition(unit.q, unit.r);
+                Vector3 toCamera = mapCamera.transform.position - unit.statusBarsRoot.transform.position;
+                if (toCamera.sqrMagnitude > 0.001f)
+                    unit.statusBarsRoot.transform.rotation = Quaternion.LookRotation(toCamera, Vector3.up);
+                unit.statusBarsRoot.SetActive(unit.renderer == null || unit.renderer.enabled);
+                RefreshUnitStatusBars(unit);
+            }
             if (unit.factionMarker != null)
             {
                 unit.factionMarker.transform.localPosition = FactionMarkerPosition(unit.q, unit.r);
@@ -1085,6 +1170,7 @@ public class HexUnitDemo : MonoBehaviour
             ApplyActiveSkin(u);
             sr.sprite=animations["down_right"][0];sr.sortingOrder=10;units.Add(u);
             CreateFactionMarker(u);
+            CreateUnitStatusBars(u);
         }
     }
 
@@ -1133,6 +1219,104 @@ public class HexUnitDemo : MonoBehaviour
         unit.factionMarker = marker;
         unit.factionMarkerRenderer = renderer;
         CreateActionHalo(unit);
+    }
+
+    private void CreateUnitStatusBars(UnitInfo unit)
+    {
+        if (unit == null || unit.visual == null) return;
+        GameObject root = new GameObject("UnitStatusBars");
+        root.transform.SetParent(transform, false);
+        root.transform.localPosition = HexToLocalPosition(unit.q, unit.r);
+        unit.statusBarsRoot = root;
+
+        Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+        if (shader == null) shader = Shader.Find("Unlit/Color");
+        if (shader == null) shader = Shader.Find("Sprites/Default");
+        if (shader == null) return;
+
+        const float width = 0.70f;
+        const float height = 0.055f;
+        CreateUnitBar(root.transform, "Health", 1.38f, width, height,
+            new Color(0.16f, 0.78f, 0.34f), shader, out Renderer hpFill);
+        unit.healthBarFill = hpFill;
+        if (unit.ammoCapacity > 0)
+        {
+            CreateUnitBar(root.transform, "Ammo", 1.47f, width, height,
+                new Color(0.22f, 0.67f, 1f), shader, out Renderer ammoFill);
+            unit.ammoBarFill = ammoFill;
+        }
+        if (unit.fuelCapacity > 0)
+        {
+            CreateUnitBar(root.transform, "Fuel", 1.56f, width, height,
+                new Color(1f, 0.70f, 0.18f), shader, out Renderer fuelFill);
+            unit.fuelBarFill = fuelFill;
+        }
+        RefreshUnitStatusBars(unit);
+    }
+
+    private void CreateUnitBar(Transform root, string label, float y, float width, float height,
+        Color fillColor, Shader shader, out Renderer fillRenderer)
+    {
+        GameObject background = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        background.name = label + "BarBackground";
+        background.transform.SetParent(root, false);
+        background.transform.localPosition = new Vector3(0f, y, 0f);
+        background.transform.localScale = new Vector3(width, height, 0.025f);
+        Collider backgroundCollider = background.GetComponent<Collider>();
+        if (backgroundCollider != null) backgroundCollider.enabled = false;
+        Renderer bgRenderer = background.GetComponent<Renderer>();
+        bgRenderer.sharedMaterial = GetOrCreateUnitBarMaterial(new Color(0.045f, 0.055f, 0.065f), shader);
+
+        GameObject fill = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        fill.name = label + "BarFill";
+        fill.transform.SetParent(root, false);
+        fill.transform.localPosition = new Vector3(-width * 0.5f, y, -0.018f);
+        fill.transform.localScale = new Vector3(width, height * 0.78f, 0.022f);
+        Collider fillCollider = fill.GetComponent<Collider>();
+        if (fillCollider != null) fillCollider.enabled = false;
+        fillRenderer = fill.GetComponent<Renderer>();
+        fillRenderer.sharedMaterial = GetOrCreateUnitBarMaterial(fillColor, shader);
+    }
+
+    private readonly Dictionary<Color, Material> unitBarMaterials = new Dictionary<Color, Material>();
+
+    private Material GetOrCreateUnitBarMaterial(Color color, Shader shader)
+    {
+        if (unitBarMaterials.TryGetValue(color, out Material material) && material != null)
+            return material;
+        material = new Material(shader) { color = color };
+        unitBarMaterials[color] = material;
+        return material;
+    }
+
+    private void UpdateBarFill(Renderer renderer, float ratio, float y, float height, float width)
+    {
+        if (renderer == null) return;
+        Transform fill = renderer.transform;
+        float clamped = Mathf.Clamp01(ratio);
+        fill.localScale = new Vector3(width * clamped, height * 0.78f, 0.022f);
+        fill.localPosition = new Vector3(-width * 0.5f + width * clamped * 0.5f, y, -0.018f);
+    }
+
+    private void RefreshUnitStatusBars(UnitInfo unit)
+    {
+        if (unit == null) return;
+        const float width = 0.70f;
+        const float height = 0.055f;
+        UpdateBarFill(unit.healthBarFill, unit.hp / (float)Mathf.Max(1, unit.maxHp), 1.38f, height, width);
+        if (unit.ammoCapacity > 0)
+            UpdateBarFill(unit.ammoBarFill, unit.currentAmmo / (float)Mathf.Max(1, unit.ammoCapacity), 1.47f, height, width);
+        if (unit.fuelCapacity > 0)
+            UpdateBarFill(unit.fuelBarFill, unit.currentFuel / (float)Mathf.Max(1, unit.fuelCapacity), 1.56f, height, width);
+    }
+
+    private void DestroyUnitPresentation(UnitInfo unit)
+    {
+        if (unit == null) return;
+        if (unit.visual != null) Destroy(unit.visual.gameObject);
+        if (unit.factionMarker != null) Destroy(unit.factionMarker);
+        if (unit.actionHaloTransform != null) Destroy(unit.actionHaloTransform.gameObject);
+        if (unit.statusBarsRoot != null) Destroy(unit.statusBarsRoot);
     }
 
     private void CreateActionHalo(UnitInfo unit)
