@@ -6,19 +6,31 @@ This development branch contains a first implementation pass for:
 - Hiding the action menu during move/attack/support/transport target selection.
 - Distinguishing click from drag: left-drag pans the camera; right-drag orbits the camera.
 - Cyan movement destinations and orange legal action-target tiles.
-- Per-action `rangeConfigured`, `minRange`, and `maxRange` fields in `GadgetUnitProfiles.json`.
+- Per-action `rangeConfigured`, `minRange`, `maxRange`, AP cost, damage type/multiplier, and ammo-consumption fields in `GadgetUnitProfiles.json`.
+- Unit production money, labour, iron, aluminium, and AP cost fields populated from the latest user-provided CSV.
+- A fully opaque abstract front-end backdrop so Main Menu, Level Select, Skin Select, Unit Codex and Skin Codex do not show the generated Test001 battlefield underneath.
 - The local fixes for `tileInfoScrollPosition` and `victoryWhenAllHostileUnitsDefeated` are preserved in the updated `HexUnitDemo.cs`.
 
 Important: this is a code update, not proof of a successful Unity build. The changes have not yet been compiled or Play-tested inside the user's Unity Editor. Test the steps below before treating this as a stable release.
 
-## Current range data
+## Current range and production data
 
-All ranges use hex distance:
-- Rocket barrage (`rockets` main weapon): 4–8, per the current design request.
-- Building capture: 0–0; the current action is executed on the unit's own tile.
-- Other currently described actions: 1–1 as provisional values until the user-provided unit data is reviewed and the remaining ranges are set deliberately.
+Schema version 7 is derived from the user's latest uploaded `单位信息(1).csv` and contains all 25 unit profiles. All ranges use hex distance and each non-empty action column is preserved in `actions[]` as `action_1`, `action_2`, or `action_3`.
 
-The unit-level `attackRange` field remains for backward compatibility. The current configured attack buttons read their range from the matching `actions[]` entry.
+Examples from that table:
+- Sniper skill: 1–5.
+- Self-propelled gun and anti-air: 1–4.
+- Rocket launcher skill: 3–6.
+- Fortress bombardment: 1–8; switching stance costs 100 AP.
+- Building capture: 0–0; the action runs on the unit's own tile.
+- Battleship skill: 1–6, even though the unit's default `attackRange` is 8.
+- Each unit now has `productionMoneyCost`, `productionLabourRequired`, `productionIronRequired`, `productionAluminiumRequired`, and `productionAP`.
+
+Action metadata also includes `actionAPCost`, `damageMultiplier`, `damageType`, and `consumesAmmo`. The attack UI reads the per-action range/cost/damage/ammo fields. Actions whose text doesn't specify a range use 1–the unit's default `射程`, except building capture and stance switching, which use 0–0.
+
+Limitation: the current movement enum has no distinct Amphibious class, so the CSV `两栖` row for `transport_ship` maps to the existing Naval enum (3). Movement rules need a dedicated amphibious class in a later gameplay pass.
+
+Unit production prices are now stored in JSON and shown in the unit codex. The factory's production queue still uses its separate Inspector `productionProfiles` list; it is not yet auto-populated from these JSON cost fields.
 
 ## Unity files to copy/sync
 
@@ -26,6 +38,7 @@ The user's actual Unity project root is a separate folder: `D:\\GitHub\\zhanjish
 
 - `UnityScripts/HexUnitDemo.cs` → `Assets/Scripts/HexUnitDemo.cs`
 - `UnityScripts/HexBattlefieldDemo.cs` → `Assets/Scripts/HexBattlefieldDemo.cs`
+- `UnityScripts/HexGameFlowController.cs` → `Assets/Scripts/HexGameFlowController.cs`
 - `UnityScripts/GadgetUnitProfiles.json` → `Assets/Resources/GadgetUnitProfiles.json`
 
 Do not place duplicate copies of the same C# classes under another folder in `Assets`; duplicate class definitions will cause compile errors. Keep `GadgetUnitProfiles.json` under `Resources` because the current loader uses `Resources.Load<TextAsset>("GadgetUnitProfiles")`.
@@ -33,12 +46,15 @@ Do not place duplicate copies of the same C# classes under another folder in `As
 ## First Unity test pass
 
 1. Wait for compilation and check that Console has no red errors.
-2. Select a ready blue unit. Click Move: the menu should disappear and reachable tiles should stay cyan. Click a reachable empty tile: the unit moves and the action menu returns.
-3. Click an attack skill. The menu should disappear; visible, legal enemy targets should turn orange. Escape cancels target selection without taking over the pause-menu shortcut. A plain right-click cancels target selection (or deselects if no target mode is active).
-4. Test a `rockets` unit: distance 1–3 must be rejected; distance 4–8 may be attacked. The 9×9 default test map may not place a rocket unit, so a dedicated test unit/profile may be needed.
-5. Left-drag over the map to pan; right-drag to rotate the view. A drag must not also select a tile/unit. Starting a drag over HUD panels must not move the camera.
-6. Test medical/support and transport actions: the menu should hide and orange target tiles should appear. Escape/right-click should cancel the mode and return to the menu.
-7. Verify that Pause, Resume, Surrender, restart, AP timing, experience, building capture, and production behavior still work.
+2. Select a ready blue unit. Click Move: the large HUD/action panels should hide and reachable tiles should stay cyan. Click a reachable empty tile: the unit moves and the action menu returns.
+3. Click an attack skill. The menu should hide; visible, legal enemy targets should turn orange. Escape or a plain right-click cancels target selection.
+4. Test a `rockets` unit: distance 1–2 must be rejected; distance 3–6 is its current CSV range. The default 9×9 map may not start with rocket artillery, so add a temporary test spawn/profile.
+5. Left-drag pans and right-drag rotates the view. A drag must not also select a tile/unit. Starting a drag over HUD panels must not move the camera.
+6. Test ammunition: a skill with `consumesAmmo=true` must require and consume ammo; a skill with `consumesAmmo=false` must remain usable when a unit's ammo is empty.
+7. Confirm the main menu and other front-end screens show an opaque abstract navy background, not the Test001 battlefield. Pause, result and in-battle settings should still show the battlefield.
+8. Verify Pause, Resume, Surrender, restart, AP timing, experience, building capture and factory production.
+
+The factory queue still reads its own Inspector list; JSON production costs are not automatically wired into production until that integration step is implemented.
 
 If any error appears, fix the first Console error before testing gameplay rules.
 
