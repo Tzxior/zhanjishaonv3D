@@ -306,8 +306,8 @@ public class HexBattlefieldDemo : MonoBehaviour
                     new Vector3(length, hexSize * 0.035f, width), surface, shader,
                     new Vector3(0f, yaw, 0f));
                 AddTerrainPart(tile.root, PrimitiveType.Cube, "RoadCenterStripe",
-                    new Vector3(direction.x * length * 0.46f, y + hexSize * 0.018f, direction.y * length * 0.46f),
-                    new Vector3(length * 0.72f, hexSize * 0.008f, hexSize * 0.025f),
+                    new Vector3(direction.x * length * 0.44f, y + hexSize * 0.018f, direction.y * length * 0.44f),
+                    new Vector3(length * 0.92f, hexSize * 0.008f, hexSize * 0.025f),
                     stripe, shader, new Vector3(0f, yaw, 0f));
             }
 
