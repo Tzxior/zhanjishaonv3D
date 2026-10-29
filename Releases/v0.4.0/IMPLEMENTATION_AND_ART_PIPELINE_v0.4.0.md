@@ -17,6 +17,12 @@ This development branch contains a first implementation pass for:
 
 Important: this is a code update, not proof of a successful Unity build. The changes have not yet been compiled or Play-tested inside the user's Unity Editor. Test the steps below before treating this as a stable release.
 
+## Faction and visual system
+
+Player team ID remains 0 and opponent team ID remains 1. This is deliberate: changing faction colors must not change AI scheduling, capture rules, or win/loss checks. The current default is red for the player and blue for the opponent. The selected player faction ID is saved to `PlayerPrefs`; the selector lives on the screen reached after choosing a level. A faction definition carries a color and neutral-by-default modifiers for attack, HP, bullet/explosion defense, movement and production cost. No special faction passive is currently configured.
+
+The current terrain/building artwork is generated from simple Unity primitives as a readability pass, not final authored art or prefab assets. Terrain decorators disable their colliders. Tile terrain IDs remain the authoritative source for movement, defense and traversal. Each building type has a distinct silhouette plus an independent faction-colored base/banner; taking over a building updates only its own ownership markers. Building labels billboard toward the current camera.
+
 ## Current range and production data
 
 Schema version 7 is derived from the user's latest uploaded `单位信息(1).csv` and contains all 25 unit profiles. All ranges use hex distance and each non-empty action column is preserved in `actions[]` as `action_1`, `action_2`, or `action_3`.
