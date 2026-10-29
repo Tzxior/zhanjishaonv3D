@@ -1859,7 +1859,7 @@ public class HexUnitDemo : MonoBehaviour
         bool canCaptureLegacyCity = battlefield.IsCity(menuUnit.q, menuUnit.r) &&
             battlefield.GetCityOwner(menuUnit.q, menuUnit.r) != menuUnit.team;
         GUI.enabled = ready && !attackMode && menuUnit.canCapture && (canCaptureBuilding || canCaptureLegacyCity);
-        if (GUILayout.Button($"占领建筑/城市（{menuUnit.captureAP} AP）")) OccupyCity();
+        if (GUILayout.Button($"占领建筑/城市（射程 0-0；{menuUnit.captureAP} AP）")) OccupyCity();
         if (selectedUnit != menuUnit) return;
 
         GUI.enabled = ready && !attackMode;
@@ -1921,10 +1921,19 @@ public class HexUnitDemo : MonoBehaviour
 
     private string ActionDescriptions(UnitInfo unit)
     {
-        var list=new List<string>();
-        if(unit.actions!=null) foreach(UnitActionProfile action in unit.actions)
-            if(action!=null && !string.IsNullOrWhiteSpace(action.description)) list.Add(action.description);
-        return string.Join("；",list);
+        var list = new List<string>();
+        if (unit.actions != null)
+        {
+            foreach (UnitActionProfile action in unit.actions)
+            {
+                if (action == null || string.IsNullOrWhiteSpace(action.description)) continue;
+                string description = action.description;
+                if (action.rangeConfigured)
+                    description += $"（射程 {action.minRange}-{action.maxRange}）";
+                list.Add(description);
+            }
+        }
+        return string.Join("；", list);
     }
 
     private void DrawConfiguredActionButtons(bool ready)
