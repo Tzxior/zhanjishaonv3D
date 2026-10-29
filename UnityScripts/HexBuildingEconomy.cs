@@ -257,9 +257,20 @@ public class HexBuildingEconomy : MonoBehaviour
 
     private Color OwnerColor(int owner)
     {
-        if (owner == 0) return new Color(0.22f, 0.55f, 0.95f);
-        if (owner == 1) return new Color(0.88f, 0.27f, 0.23f);
-        return new Color(0.72f, 0.72f, 0.68f);
+        switch (owner)
+        {
+            case 0: return new Color(0.22f, 0.55f, 0.95f); // Blue / player
+            case 1: return new Color(0.88f, 0.27f, 0.23f); // Red
+            case 2: return new Color(0.13f, 0.14f, 0.17f); // Black
+            case 3: return new Color(0.19f, 0.58f, 0.31f); // Green
+            case 4: return new Color(0.88f, 0.68f, 0.20f); // Yellow
+            case 5: return new Color(0.52f, 0.32f, 0.72f); // Purple
+            case -1: return new Color(0.72f, 0.72f, 0.68f); // Neutral
+            default:
+                // Deterministic fallback for additional factions.
+                float hue = Mathf.Repeat(owner * 0.173f, 1f);
+                return Color.HSVToRGB(hue, 0.65f, 0.9f);
+        }
     }
 
     private string ShortName(HexBuildingType type)
@@ -509,9 +520,17 @@ public class HexBuildingEconomy : MonoBehaviour
 
     private string TeamName(int team)
     {
-        if (team == 0) return "我方";
-        if (team == 1) return "敌方";
-        return team < 0 ? "无主" : "阵营 " + team;
+        switch (team)
+        {
+            case -1: return "无主";
+            case 0: return "我方（蓝方）";
+            case 1: return "红方";
+            case 2: return "黑方";
+            case 3: return "绿方";
+            case 4: return "黄方";
+            case 5: return "紫方";
+            default: return "阵营 " + team;
+        }
     }
 
     private bool IsFactory(HexBuildingType type)
@@ -537,7 +556,9 @@ public class HexBuildingEconomy : MonoBehaviour
         if (profile == null || string.IsNullOrWhiteSpace(profile.unitId)) { reason = "单位 ID 未配置。"; return false; }
         if (driver == null || !driver.HasUnitProfile(profile.unitId)) { reason = "单位数据库中找不到该单位 ID。"; return false; }
         TeamWallet wallet = EnsureWallet(team);
-        if (wallet.money < profile.moneyCost) { reason = "金钱不足。"; return false; }
+        float costMultiplier = team == PlayerTeamId && driver != null ? driver.GetSelectedSkinProductionCostMultiplier() : 1f;
+        int effectiveMoneyCost = Mathf.CeilToInt(profile.moneyCost * Mathf.Max(0.01f, costMultiplier));
+        if (wallet.money < effectiveMoneyCost) { reason = "当前皮肤下的制造费用不足。"; return false; }
         if (GetLabourAvailable(team) < profile.labourRequired) { reason = "劳动力不足。"; return false; }
         if (GetIronAvailable(team) < profile.ironRequired) { reason = "铁矿不足。"; return false; }
         if (GetAluminiumAvailable(team) < profile.aluminiumRequired) { reason = "铝矿不足。"; return false; }
