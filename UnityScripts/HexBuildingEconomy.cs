@@ -121,11 +121,13 @@ public class HexBuildingEconomy : MonoBehaviour
         {
             battlefield = map != null ? map : battlefield;
             unitController = units != null ? units : unitController;
+            EnsureProductionProfilesFromUnitDatabase();
             return;
         }
 
         battlefield = map;
         unitController = units;
+        EnsureProductionProfilesFromUnitDatabase();
         if (battlefield == null)
         {
             Debug.LogError("HexBuildingEconomy requires a HexBattlefieldDemo on the same GameObject.");
@@ -155,7 +157,8 @@ public class HexBuildingEconomy : MonoBehaviour
             if (building == null || building.label == null) continue;
             Vector3 toCamera = markerCamera.transform.position - building.label.transform.position;
             if (toCamera.sqrMagnitude > 0.001f)
-                building.label.transform.rotation = Quaternion.LookRotation(toCamera, Vector3.up);
+                building.label.transform.rotation =
+                    Quaternion.LookRotation(toCamera, Vector3.up) * Quaternion.Euler(0f, 180f, 0f);
         }
     }
 
@@ -229,6 +232,15 @@ public class HexBuildingEconomy : MonoBehaviour
 
             CreateMarker(building);
         }
+    }
+
+    private void EnsureProductionProfilesFromUnitDatabase()
+    {
+        if (productionProfiles != null && productionProfiles.Length > 0) return;
+        if (unitController == null) return;
+        UnitProductionProfile[] generated = unitController.BuildProductionProfilesFromUnitDatabase();
+        if (generated != null && generated.Length > 0)
+            productionProfiles = generated;
     }
 
     private Vector3 TilePosition(int q, int r)
@@ -412,7 +424,7 @@ public class HexBuildingEconomy : MonoBehaviour
         GameObject labelObject = new GameObject("BuildingLabel");
         labelObject.transform.SetParent(marker.transform, false);
         labelObject.transform.localPosition = new Vector3(0f, 1.06f, 0f);
-        labelObject.transform.localScale = Vector3.one * 0.18f;
+        labelObject.transform.localScale = Vector3.one * 0.09f;
         TextMesh label = labelObject.AddComponent<TextMesh>();
         label.text = ShortName(building.type);
         label.fontSize = 64;
@@ -456,7 +468,7 @@ public class HexBuildingEconomy : MonoBehaviour
             case HexBuildingType.LargeCity: return "大城市";
             case HexBuildingType.SmallCity: return "小城市";
             case HexBuildingType.Village: return "乡村";
-            case HexBuildingType.Arsenal: return "兵工厂";
+            case HexBuildingType.Arsenal: return "兵营";
             case HexBuildingType.TankFactory: return "战车厂";
             case HexBuildingType.ArtilleryFactory: return "火炮厂";
             case HexBuildingType.Shipyard: return "造船厂";
@@ -651,11 +663,30 @@ public class HexBuildingEconomy : MonoBehaviour
         else if (building.type == HexBuildingType.AluminiumMine)
             GUILayout.Label($"铝矿容量：{GetAluminiumCapacity(viewingTeam)}；资源在制造时临时占用");
 
-        if (viewingTeam != 0 || building.ownerTeam != viewingTeam || !IsFactory(building.type))
+        if (!IsFactory(building.type)) return;
+
+        bool occupied = driver != null &&
+            driver.TryGetUnitAtTile(q, r, out int unitTeam, out string unitName, out string unitCategory);
+        if (occupied)
+        {
+            GUILayout.Label($"驻扎单位：{unitName}（{TeamName(unitTeam)}）");
+            if (unitTeam != building.ownerTeam)
+                GUILayout.Label("建筑归属与驻扎单位阵营不一致，不能在此建筑补给。");
+            else if (!FactoryCategoryMatches(building.type, unitCategory))
+                GUILayout.Label("驻扎单位兵种不匹配；此建筑不会为该单位提供自动补给。");
+            else
+                GUILayout.Label("自动补给已启用：每 10 AP 恢复 10 HP、补充 1 发弹药与 2 点燃料（受单位容量限制）。");
+            return; // A unit occupies the tile: production choices are intentionally hidden.
+        }
+
+        if (viewingTeam != 0 || building.ownerTeam != viewingTeam)
+        {
+            GUILayout.Label("此生产建筑地块为空；只有控制该建筑的我方才能生产。");
             return;
+        }
 
         GUILayout.Space(4);
-        GUILayout.Label("生产");
+        GUILayout.Label("生产（占用金钱并临时预留劳动力/矿产资源）");
         if (building.activeOrder != null)
         {
             ProductionOrder order = building.activeOrder;
@@ -692,13 +723,26 @@ public class HexBuildingEconomy : MonoBehaviour
         }
     }
 
+    private bool FactoryCategoryMatches(HexBuildingType type, string category)
+    {
+        switch (type)
+        {
+            case HexBuildingType.Arsenal: return category == "infantry";
+            case HexBuildingType.TankFactory: return category == "ground_vehicle";
+            case HexBuildingType.ArtilleryFactory: return category == "artillery";
+            case HexBuildingType.Shipyard: return category == "naval";
+            case HexBuildingType.Airport: return category == "air";
+            default: return false;
+        }
+    }
+
     private string TeamName(int team)
     {
         switch (team)
         {
             case -1: return "无主";
-            case 0: return "我方（蓝方）";
-            case 1: return "红方";
+            case 0: return "我方";
+            case 1: return "敌方";
             case 2: return "黑方";
             case 3: return "绿方";
             case 4: return "黄方";
