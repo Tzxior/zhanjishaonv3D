@@ -162,6 +162,8 @@ public class HexUnitDemo : MonoBehaviour
         public bool canCapture;
         public bool isSkinChest;
         public string rewardSkinId;
+        public GameObject factionMarker;
+        public Renderer factionMarkerRenderer;
     }
 
     private class PathNode
@@ -279,6 +281,22 @@ public class HexUnitDemo : MonoBehaviour
 
     public float GetSelectedSkinProductionCostMultiplier() => skinProductionCostMultiplier;
 
+    public void ConfigureFactionColors(Color playerColor, Color opponentColor)
+    {
+        if (battlefield == null) battlefield = GetComponent<HexBattlefieldDemo>();
+        if (battlefield != null) battlefield.SetFactionColors(playerColor, opponentColor);
+
+        if (buildingEconomy == null) buildingEconomy = GetComponent<HexBuildingEconomy>();
+        if (buildingEconomy != null) buildingEconomy.SetFactionColors(playerColor, opponentColor);
+
+        foreach (UnitInfo unit in units)
+        {
+            if (unit == null || unit.factionMarkerRenderer == null ||
+                unit.factionMarkerRenderer.sharedMaterial == null) continue;
+            unit.factionMarkerRenderer.sharedMaterial.color = unit.team == 0 ? playerColor : opponentColor;
+        }
+    }
+
     private void ApplyActiveSkin(UnitInfo unit)
     {
         if (unit == null || unit.team != 0) return;
@@ -298,7 +316,11 @@ public class HexUnitDemo : MonoBehaviour
         battleEnded = false;
         gameplayPaused = true;
         foreach (UnitInfo unit in units)
-            if (unit != null && unit.visual != null) Destroy(unit.visual.gameObject);
+        {
+            if (unit == null) continue;
+            if (unit.visual != null) Destroy(unit.visual.gameObject);
+            if (unit.factionMarker != null) Destroy(unit.factionMarker);
+        }
         units.Clear();
         selectedUnit = null;
         hasSelectedTile = false;
@@ -658,6 +680,8 @@ public class HexUnitDemo : MonoBehaviour
                 if(distance <= observer.reconRange) { detected = true; break; }
             }
             target.renderer.enabled = detected;
+            if (target.factionMarkerRenderer != null)
+                target.factionMarkerRenderer.enabled = detected;
             if(!detected && selectedUnit == target)
             {
                 selectedUnit = null;
@@ -675,10 +699,18 @@ public class HexUnitDemo : MonoBehaviour
         if (mapCamera == null) return;
         foreach (UnitInfo unit in units)
         {
-            if (unit.visual == null) continue;
-            Vector3 toCamera = mapCamera.transform.position - unit.visual.position;
-            if (toCamera.sqrMagnitude > 0.001f)
-                unit.visual.rotation = Quaternion.LookRotation(toCamera, Vector3.up);
+            if (unit.visual != null)
+            {
+                Vector3 toCamera = mapCamera.transform.position - unit.visual.position;
+                if (toCamera.sqrMagnitude > 0.001f)
+                    unit.visual.rotation = Quaternion.LookRotation(toCamera, Vector3.up);
+            }
+            if (unit.factionMarker != null)
+            {
+                unit.factionMarker.transform.localPosition = FactionMarkerPosition(unit.q, unit.r);
+                if (unit.team != 0 && unit.renderer != null && unit.factionMarkerRenderer != null)
+                    unit.factionMarkerRenderer.enabled = unit.renderer.enabled;
+            }
         }
     }
 
@@ -932,6 +964,7 @@ public class HexUnitDemo : MonoBehaviour
                 attackAP=Mathf.Max(0,p.attackAP),captureAP=Mathf.Max(0,p.captureAP),restAP=Mathf.Max(0,p.restAP),attackRange=Mathf.Max(1,p.attackRange),canCapture=p.canCapture};
             ApplyActiveSkin(u);
             sr.sprite=animations["down_right"][0];sr.sortingOrder=10;units.Add(u);
+            CreateFactionMarker(u);
         }
     }
 
@@ -941,6 +974,44 @@ public class HexUnitDemo : MonoBehaviour
         return new Vector3(1.5f * size * q,
             battlefield.tileThickness * 0.5f + liftAboveTile,
             Mathf.Sqrt(3f) * size * (r + q * 0.5f));
+    }
+
+    private Vector3 FactionMarkerPosition(int q, int r)
+    {
+        float size = battlefield != null ? battlefield.hexSize : 1f;
+        float thickness = battlefield != null ? battlefield.tileThickness : 0.16f;
+        return new Vector3(1.5f * size * q,
+            thickness * 0.5f + 0.025f,
+            Mathf.Sqrt(3f) * size * (r + q * 0.5f));
+    }
+
+    private void CreateFactionMarker(UnitInfo unit)
+    {
+        if (unit == null || unit.isSkinChest) return;
+        GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        marker.name = unit.team == 0 ? "PlayerFactionRing" : "OpponentFactionRing";
+        marker.transform.SetParent(transform, false);
+        marker.transform.localPosition = FactionMarkerPosition(unit.q, unit.r);
+        float size = battlefield != null ? battlefield.hexSize : 1f;
+        marker.transform.localScale = new Vector3(0.64f * size, 0.018f * size, 0.64f * size);
+
+        Collider collider = marker.GetComponent<Collider>();
+        if (collider != null) collider.enabled = false;
+        Renderer renderer = marker.GetComponent<Renderer>();
+        if (renderer != null)
+        {
+            Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null) shader = Shader.Find("Standard");
+            if (shader == null) shader = Shader.Find("Unlit/Color");
+            if (shader != null) renderer.sharedMaterial = new Material(shader);
+            renderer.material.color = battlefield != null
+                ? battlefield.GetFactionColor(unit.team)
+                : (unit.team == 0 ? new Color(0.86f, 0.16f, 0.21f) : new Color(0.16f, 0.39f, 0.86f));
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+        }
+        unit.factionMarker = marker;
+        unit.factionMarkerRenderer = renderer;
     }
 
     private void SelectUnit(UnitInfo unit)
@@ -1334,6 +1405,7 @@ public class HexUnitDemo : MonoBehaviour
             if (target.isSkinChest) SkinChestDefeated?.Invoke(target.rewardSkinId);
             units.Remove(target);
             if (target.visual != null) Destroy(target.visual.gameObject);
+            if (target.factionMarker != null) Destroy(target.factionMarker);
             if (!target.isSkinChest) statusMessage += " 敌方单位被击破。";
             CheckEliminationResult();
         }
@@ -2149,7 +2221,7 @@ public class HexUnitDemo : MonoBehaviour
         if(selectedUnit==null||!CanUnitTransport(selectedUnit)||passenger.team!=selectedUnit.team||passenger.carrier!=null||passenger.unitClass==HexUnitClass.Air||passenger.unitClass==HexUnitClass.Naval){statusMessage="只能装载相邻、同阵营的陆地单位。";return;}
         if(selectedUnit.cargo.Count>=selectedUnit.resourceCapacity){statusMessage="运载容量已满。";return;}
         if(HexDistance(new Vector2Int(selectedUnit.q,selectedUnit.r),new Vector2Int(passenger.q,passenger.r))>1){statusMessage="载员必须相邻。";return;}
-        selectedUnit.cargo.Add(passenger);passenger.carrier=selectedUnit;if(passenger.renderer!=null)passenger.renderer.enabled=false;transportMode=false;statusMessage=passenger.unitName+"已装载。";FinishPlayerActivation(100);
+        selectedUnit.cargo.Add(passenger);passenger.carrier=selectedUnit;if(passenger.renderer!=null)passenger.renderer.enabled=false;if(passenger.factionMarkerRenderer!=null)passenger.factionMarkerRenderer.enabled=false;transportMode=false;statusMessage=passenger.unitName+"已装载。";FinishPlayerActivation(100);
     }
     private void TryUnloadCargo(int q,int r)
     {
@@ -2157,7 +2229,7 @@ public class HexUnitDemo : MonoBehaviour
         if(HexDistance(new Vector2Int(selectedUnit.q,selectedUnit.r),new Vector2Int(q,r))>1){statusMessage="卸载地块须相邻。";return;}
         UnitInfo passenger=selectedUnit.cargo[0];
         if(!battlefield.IsInsideMap(q,r)||FindUnitAt(q,r)!=null||!battlefield.IsTileWalkable(q,r,passenger.unitClass)){statusMessage="此地块不可卸载。";return;}
-        selectedUnit.cargo.RemoveAt(0);passenger.carrier=null;passenger.q=q;passenger.r=r;ReserveNextActionNode(passenger,Mathf.Max(battleTimeAP+1f,passenger.nextReadyTime));if(passenger.visual!=null)passenger.visual.localPosition=HexToLocalPosition(q,r);if(passenger.renderer!=null)passenger.renderer.enabled=true;transportMode=false;statusMessage=passenger.unitName+"已卸载。";FinishPlayerActivation(100);
+        selectedUnit.cargo.RemoveAt(0);passenger.carrier=null;passenger.q=q;passenger.r=r;ReserveNextActionNode(passenger,Mathf.Max(battleTimeAP+1f,passenger.nextReadyTime));if(passenger.visual!=null)passenger.visual.localPosition=HexToLocalPosition(q,r);if(passenger.renderer!=null)passenger.renderer.enabled=true;if(passenger.factionMarkerRenderer!=null)passenger.factionMarkerRenderer.enabled=true;transportMode=false;statusMessage=passenger.unitName+"已卸载。";FinishPlayerActivation(100);
     }
 
     private string TerrainAPCost(int q,int r,HexUnitClass type)
