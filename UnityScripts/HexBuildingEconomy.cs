@@ -177,7 +177,7 @@ public class HexBuildingEconomy : MonoBehaviour
                 ProductionOrder order = building.activeOrder;
                 building.label.text = ShortName(building.type) +
                     (IsFactory(building.type) && order != null && order.profile != null
-                        ? "\\n" + Mathf.Clamp(Mathf.FloorToInt(100f * order.progress /
+                        ? "\n" + Mathf.Clamp(Mathf.FloorToInt(100f * order.progress /
                             Mathf.Max(1, order.profile.productionAP)), 0, 100) + "%"
                         : "");
                 Vector3 toCamera = markerCamera.transform.position - building.label.transform.position;
@@ -264,7 +264,7 @@ public class HexBuildingEconomy : MonoBehaviour
             new BuildingPlacement { q = 1, r = 4, type = HexBuildingType.Arsenal, ownerTeam = 0 },
             new BuildingPlacement { q = 2, r = 5, type = HexBuildingType.TankFactory, ownerTeam = -1 },
             new BuildingPlacement { q = 3, r = 4, type = HexBuildingType.ArtilleryFactory, ownerTeam = -1 },
-            new BuildingPlacement { q = 1, r = 2, type = HexBuildingType.Shipyard, ownerTeam = 0 },
+            new BuildingPlacement { q = 1, r = 7, type = HexBuildingType.Shipyard, ownerTeam = 0 },
             new BuildingPlacement { q = 2, r = 4, type = HexBuildingType.Airport, ownerTeam = 0 },
             new BuildingPlacement { q = 4, r = 2, type = HexBuildingType.IronMine, ownerTeam = 0 },
             new BuildingPlacement { q = 7, r = 8, type = HexBuildingType.AluminiumMine, ownerTeam = 1 },
