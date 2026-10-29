@@ -235,6 +235,134 @@ public class HexUnitDemo : MonoBehaviour
         statusMessage = "请从主菜单选择关卡。";
     }
 
+    public void SetGameplayPaused(bool paused)
+    {
+        if (battleEnded && !paused) return;
+        gameplayPaused = paused;
+        if (!paused && !simulationRunning && !HasReadyBlueUnit())
+            StartCoroutine(RunSimulationUntilPlayerCanAct());
+    }
+
+    public void ConfigureSkinModifiers(float attack, float hp, float bulletDefense,
+        float explosionDefense, float movement, float productionCost)
+    {
+        skinAttackMultiplier = Mathf.Max(0.01f, attack);
+        skinHPMultiplier = Mathf.Max(0.01f, hp);
+        skinBulletDefenseMultiplier = Mathf.Max(0.01f, bulletDefense);
+        skinExplosionDefenseMultiplier = Mathf.Max(0.01f, explosionDefense);
+        skinMovementMultiplier = Mathf.Max(0.01f, movement);
+        skinProductionCostMultiplier = Mathf.Max(0.01f, productionCost);
+    }
+
+    public float GetSelectedSkinProductionCostMultiplier() => skinProductionCostMultiplier;
+
+    private void ApplyActiveSkin(UnitInfo unit)
+    {
+        if (unit == null || unit.team != 0) return;
+        unit.maxHp = Mathf.Max(1, Mathf.RoundToInt(unit.maxHp * skinHPMultiplier));
+        unit.hp = unit.maxHp;
+        unit.baseAttackPower = Mathf.Max(0, Mathf.RoundToInt(unit.baseAttackPower * skinAttackMultiplier));
+        unit.attack = unit.baseAttackPower;
+        unit.bulletDefense = Mathf.Max(0, Mathf.RoundToInt(unit.bulletDefense * skinBulletDefenseMultiplier));
+        unit.explosionDefense = Mathf.Max(0, Mathf.RoundToInt(unit.explosionDefense * skinExplosionDefenseMultiplier));
+        unit.movementPower = Mathf.Max(1, Mathf.RoundToInt(unit.movementPower * skinMovementMultiplier));
+    }
+
+    public void ResetForNewMatch()
+    {
+        StopAllCoroutines();
+        simulationRunning = false;
+        battleEnded = false;
+        gameplayPaused = true;
+        foreach (UnitInfo unit in units)
+            if (unit != null && unit.visual != null) Destroy(unit.visual.gameObject);
+        units.Clear();
+        selectedUnit = null;
+        hasSelectedTile = false;
+        moveMode = attackMode = supportMode = transportMode = false;
+        supportAction = "";
+        battleTimeAP = 0f;
+        statusMessage = "新一局已初始化。";
+        if (battlefield != null) battlefield.SetMovementHighlights(null);
+        if (buildingEconomy != null) buildingEconomy.ResetForNewBattle(this);
+        SpawnStartingUnits(blueStartingPositions, blueUnitProfiles, blueStartingProfileIds, 0, blueAnimations);
+        SpawnStartingUnits(redStartingPositions, redUnitProfiles, redStartingProfileIds, 1, redAnimations);
+        InitializeUniqueActionNodes();
+    }
+
+    public bool HasUnitProfile(string unitId)
+    {
+        return !string.IsNullOrWhiteSpace(unitId) && profilesById.ContainsKey(unitId);
+    }
+
+    public string[] GetUnitCodexEntries()
+    {
+        var entries = new List<string>();
+        var ids = new List<string>(profilesById.Keys);
+        ids.Sort(StringComparer.Ordinal);
+        foreach (string id in ids)
+        {
+            UnitBattleProfile p = profilesById[id];
+            if (p == null) continue;
+            entries.Add($"{p.unitName} [{p.id}]\n分类：{CategoryName(p.unitCategory)}\n生命 {p.maxHP}　攻击 {p.attackPower}　子弹防御 {p.bulletDefense}　爆炸防御 {p.explosionDefense}\n移动力 {p.movementPower}　范围 {p.attackRange}　攻击 AP {p.attackAP}　弹药 {p.ammoCapacity}　燃料 {p.fuelCapacity}\n{p.description}");
+        }
+        return entries.ToArray();
+    }
+
+    public bool TrySpawnProducedUnit(string unitId, int team, int originQ, int originR)
+    {
+        if (!HasUnitProfile(unitId)) return false;
+        UnitBattleProfile profile = profilesById[unitId];
+        var candidates = new List<Vector2Int> { new Vector2Int(originQ, originR) };
+        foreach (Vector2Int offset in Neighbors)
+            candidates.Add(new Vector2Int(originQ + offset.x, originR + offset.y));
+        foreach (Vector2Int coordinate in candidates)
+        {
+            if (!battlefield.IsInsideMap(coordinate.x, coordinate.y) ||
+                FindUnitAt(coordinate.x, coordinate.y) != null ||
+                !battlefield.IsTileWalkable(coordinate.x, coordinate.y, profile.unitClass))
+                continue;
+            Dictionary<string, Sprite[]> animation = team == 0 ? blueAnimations : redAnimations;
+            SpawnStartingUnits(new[] { coordinate }, null, new[] { unitId }, team, animation);
+            return FindUnitAt(coordinate.x, coordinate.y) != null;
+        }
+        return false;
+    }
+
+    public void SpawnSkinRewardChest(Vector2Int coordinate, string skinId, string displayName, int maxHP)
+    {
+        if (!battlefield.IsInsideMap(coordinate.x, coordinate.y) ||
+            FindUnitAt(coordinate.x, coordinate.y) != null)
+        {
+            Debug.LogWarning($"Skin chest at {coordinate} overlaps a unit or is outside the map.");
+            return;
+        }
+
+        Sprite sprite = CreatePixelUnitSprite(new Color32(226, 174, 53, 255), new Color32(255, 233, 122, 255));
+        var frames = new Dictionary<string, Sprite[]>();
+        foreach (string direction in Directions) frames[direction] = new[] { sprite, sprite, sprite, sprite };
+        GameObject icon = new GameObject("SkinRewardChest");
+        icon.transform.SetParent(transform, false);
+        icon.transform.localPosition = HexToLocalPosition(coordinate.x, coordinate.y);
+        icon.transform.localScale = Vector3.one * iconScale;
+        SpriteRenderer renderer = icon.AddComponent<SpriteRenderer>();
+        renderer.sprite = sprite;
+        renderer.sortingOrder = 15;
+        units.Add(new UnitInfo
+        {
+            q = coordinate.x, r = coordinate.y, team = 1,
+            unitClass = HexUnitClass.Infantry, visual = icon.transform, renderer = renderer,
+            directionalFrames = frames, currentDirection = "down_right",
+            baseScale = Vector3.one * iconScale, unitId = "skin_chest",
+            unitName = string.IsNullOrWhiteSpace(displayName) ? "皮肤宝箱" : displayName,
+            unitCategory = "special", hp = Mathf.Max(1, maxHP), maxHp = Mathf.Max(1, maxHP),
+            attack = 0, baseAttackPower = 0, attackAP = 0, movementPower = 1,
+            movementAPLimit = 1, attackRange = 1, canCapture = false,
+            reconRange = 0, concealment = 0, isSkinChest = true, rewardSkinId = skinId,
+            nextReadyTime = float.PositiveInfinity, ammoCapacity = 0, fuelCapacity = 0, resourceCapacity = 0
+        });
+    }
+
     private void LoadUnitProfileDatabase()
     {
         profilesById.Clear();
