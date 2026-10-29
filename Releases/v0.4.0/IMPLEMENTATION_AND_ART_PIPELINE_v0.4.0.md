@@ -19,9 +19,9 @@ Important: this is a code update, not proof of a successful Unity build. The cha
 
 ## Faction and visual system
 
-Player team ID remains 0 and opponent team ID remains 1. This is deliberate: changing faction colors must not change AI scheduling, capture rules, or win/loss checks. The current default is red for the player and blue for the opponent. The selected player faction ID is saved to `PlayerPrefs`; the selector lives on the screen reached after choosing a level. A faction definition carries a color and neutral-by-default modifiers for attack, HP, bullet/explosion defense, movement and production cost. No special faction passive is currently configured.
+Player team ID remains 0 and opponent team ID remains 1. This is deliberate: changing faction colors must not change AI scheduling, capture rules, or win/loss checks. The current default is red for the player and blue for the opponent. The selected player faction ID is saved to `PlayerPrefs`; the selector lives on the screen reached after choosing a level. Faction definitions carry color plus neutral-by-default multipliers for attack, HP, bullet/explosion defense, movement and production cost. Player modifiers combine with the selected skin modifiers; opponent modifiers are configured independently through `opponentFactionId`. No faction has a special active/passive ability configured yet, and all default multipliers are 1.
 
-The current terrain/building artwork is generated from simple Unity primitives as a readability pass, not final authored art or prefab assets. Terrain decorators disable their colliders. Tile terrain IDs remain the authoritative source for movement, defense and traversal. Each building type has a distinct silhouette plus an independent faction-colored base/banner; taking over a building updates only its own ownership markers. Building labels billboard toward the current camera.
+The current terrain/building artwork is generated from simple Unity primitives as a readability pass, not final authored models or prefab assets. Terrain decorators disable their colliders; tile terrain IDs remain the source of truth for movement, defense and traversal. Terrain icons use short codes. Each building type has a distinct silhouette and independent faction-colored base/banner; taking over a building updates its own ownership markers. Unit ground rings and building labels follow movement/camera changes, and enemy rings are hidden when the enemy is not detected.
 
 ## Current range and production data
 
@@ -52,12 +52,6 @@ The user's actual Unity project root is a separate folder: `D:\\GitHub\\zhanjish
 - `UnityScripts/GadgetUnitProfiles.json` → `Assets/Resources/GadgetUnitProfiles.json`
 
 Do not place duplicate copies of the same C# classes under another folder in `Assets`; duplicate class definitions will cause compile errors. Keep `GadgetUnitProfiles.json` under `Resources` because the current loader uses `Resources.Load<TextAsset>("GadgetUnitProfiles")`.
-
-## Faction and visual system
-
-Player team ID remains 0 and opponent team ID remains 1. This is deliberate: changing faction colors must not change AI scheduling, capture rules, or win/loss checks. The current default is red for the player and blue for the opponent. The selected player faction ID is saved to `PlayerPrefs`; the selector lives on the screen reached after choosing a level. A faction definition carries a color and neutral-by-default modifiers for attack, HP, bullet/explosion defense, movement and production cost. No special faction passive is currently configured.
-
-The current terrain/building artwork is generated from simple Unity primitives as a readability pass, not final authored art or prefab assets. Terrain decorators disable their colliders. Tile terrain IDs remain the authoritative source for movement, defense and traversal. Each building type has a distinct silhouette plus an independent faction-colored base/banner; taking over a building updates only its own ownership markers.
 
 ## First Unity test pass
 
@@ -131,7 +125,7 @@ Do not introduce Addressables until there is a real need for remote content, lar
 
 ## Visual distinguishability plan
 
-The current map is a flat hex mesh colored by terrain and buildings are colored cylinders with text. The next visual pass should prioritize **silhouette + surface pattern + icon + ownership mark**, not color alone.
+A first code-generated readability pass is now implemented using simple Unity primitives rather than final authored models. Terrain uses distinct silhouettes/surface marks (trees, mounds, rocks, water ripples, road strips, dryland scrub, paved city footprint) plus short terrain-code icons. Buildings use different silhouettes and a separate faction-colored base/banner; labels billboard toward the camera. The next visual pass should replace/augment these generated shapes with authored Prefabs, proper surface materials, selection outlines and dedicated illustrated icons, retaining the rule **silhouette + surface pattern + icon + ownership mark**, not color alone.
 
 ### Terrain identifiers
 - Grassland: a mostly flat green tile with a subtle grass/brush pattern.
