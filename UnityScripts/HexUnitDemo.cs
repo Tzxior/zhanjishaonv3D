@@ -555,10 +555,10 @@ public class HexUnitDemo : MonoBehaviour
         AnimateUnits();
         UpdateUnitVisibility();
 
-        if (!gameplayPaused && !battleEnded && WasEscapePressed())
+        // Escape cancels target selection only; the game-flow controller keeps ownership of the pause-menu shortcut.
+        if (!gameplayPaused && !battleEnded && actionMenuHiddenForTargetSelection && WasEscapePressed())
         {
-            if (actionMenuHiddenForTargetSelection) CancelTargetSelection();
-            else DeselectAll();
+            CancelTargetSelection();
             return;
         }
 
