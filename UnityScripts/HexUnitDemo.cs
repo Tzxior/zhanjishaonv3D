@@ -1974,8 +1974,11 @@ public class HexUnitDemo : MonoBehaviour
             {
                 if (action == null || string.IsNullOrWhiteSpace(action.description)) continue;
                 string description = action.description;
-                if (action.rangeConfigured)
+                if (action.rangeConfigured && !description.Contains("距离"))
                     description += $"（射程 {action.minRange}-{action.maxRange}）";
+                if (action.actionAPCost > 0 &&
+                    description.IndexOf("ap", StringComparison.OrdinalIgnoreCase) < 0)
+                    description += $"（{action.actionAPCost} AP）";
                 list.Add(description);
             }
         }
@@ -1990,9 +1993,10 @@ public class HexUnitDemo : MonoBehaviour
         {
             if (action == null || string.IsNullOrWhiteSpace(action.description)) continue;
             string description = action.description;
-            if (action.rangeConfigured)
+            if (action.rangeConfigured && !description.Contains("距离"))
                 description += $"（射程 {action.minRange}-{action.maxRange}）";
-            if (action.actionAPCost > 0)
+            if (action.actionAPCost > 0 &&
+                description.IndexOf("ap", StringComparison.OrdinalIgnoreCase) < 0)
                 description += $"（{action.actionAPCost} AP）";
             list.Add(description);
         }
