@@ -609,6 +609,24 @@ public class HexBuildingEconomy : MonoBehaviour
         return false;
     }
 
+    public bool TryGetBuildingAt(int q, int r, out string name, out int owner,
+        out HexBuildingType type, out float nextReadyTime)
+    {
+        if (buildingsByCoordinate.TryGetValue(new Vector2Int(q, r), out BuildingState building))
+        {
+            name = ShortName(building.type);
+            owner = building.ownerTeam;
+            type = building.type;
+            nextReadyTime = building.nextReadyTime;
+            return true;
+        }
+        name = string.Empty;
+        owner = -1;
+        type = default;
+        nextReadyTime = 0f;
+        return false;
+    }
+
     public bool CanCaptureAt(int q, int r, int team)
     {
         return buildingsByCoordinate.TryGetValue(new Vector2Int(q, r), out BuildingState building) &&
