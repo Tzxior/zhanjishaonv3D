@@ -1291,7 +1291,7 @@ public class HexUnitDemo : MonoBehaviour
 
         const float width = 0.70f;
         const float height = 0.055f;
-        CreateUnitBar(root.transform, "Health", 1.38f, width, height,
+        CreateUnitBar(root.transform, "Health", 1.56f, width, height,
             new Color(0.16f, 0.78f, 0.34f), shader, out Renderer hpFill);
         unit.healthBarFill = hpFill;
         if (unit.ammoCapacity > 0)
@@ -1302,7 +1302,7 @@ public class HexUnitDemo : MonoBehaviour
         }
         if (unit.fuelCapacity > 0)
         {
-            CreateUnitBar(root.transform, "Fuel", 1.56f, width, height,
+            CreateUnitBar(root.transform, "Fuel", 1.38f, width, height,
                 new Color(1f, 0.70f, 0.18f), shader, out Renderer fuelFill);
             unit.fuelBarFill = fuelFill;
         }
@@ -1358,11 +1358,11 @@ public class HexUnitDemo : MonoBehaviour
         if (unit == null) return;
         const float width = 0.70f;
         const float height = 0.055f;
-        UpdateBarFill(unit.healthBarFill, unit.hp / (float)Mathf.Max(1, unit.maxHp), 1.38f, height, width);
+        UpdateBarFill(unit.healthBarFill, unit.hp / (float)Mathf.Max(1, unit.maxHp), 1.56f, height, width);
         if (unit.ammoCapacity > 0)
             UpdateBarFill(unit.ammoBarFill, unit.currentAmmo / (float)Mathf.Max(1, unit.ammoCapacity), 1.47f, height, width);
         if (unit.fuelCapacity > 0)
-            UpdateBarFill(unit.fuelBarFill, unit.currentFuel / (float)Mathf.Max(1, unit.fuelCapacity), 1.56f, height, width);
+            UpdateBarFill(unit.fuelBarFill, unit.currentFuel / (float)Mathf.Max(1, unit.fuelCapacity), 1.38f, height, width);
     }
 
     private void DestroyUnitPresentation(UnitInfo unit)
@@ -2058,7 +2058,7 @@ public class HexUnitDemo : MonoBehaviour
             if (target.hp <= 0)
             {
                 units.Remove(target);
-                if (target.visual != null) Destroy(target.visual.gameObject);
+                DestroyUnitPresentation(target);
                 statusMessage += " 我方单位被击破。";
                 CheckEliminationResult();
                 if (battleEnded) yield break;
