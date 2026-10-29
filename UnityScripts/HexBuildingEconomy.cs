@@ -1126,13 +1126,16 @@ public class HexBuildingEconomy : MonoBehaviour
         if (!buildingsByCoordinate.TryGetValue(new Vector2Int(q, r), out BuildingState building) ||
             !IsFactory(building.type)) return;
 
-        int occupiedTeam;
-        string unitAtTileName, unitAtTileCategory;
+        // Initialize these before the short-circuit expression. If driver is null,
+        // the TryGetUnitAtTile call is skipped and its out parameters are not assigned.
+        int occupiedTeam = -1;
+        string occupiedName = string.Empty;
+        string occupiedCategory = string.Empty;
         bool occupied = driver != null &&
-            driver.TryGetUnitAtTile(q, r, out occupiedTeam, out unitAtTileName, out unitAtTileCategory);
+            driver.TryGetUnitAtTile(q, r, out occupiedTeam, out occupiedName, out occupiedCategory);
         if (occupied)
         {
-            GUILayout.Label("驻扎单位：" + unitAtTileName + "；工厂被占用，不能发起新生产。");
+            GUILayout.Label("驻扎单位：" + occupiedName + "；工厂被占用，不能发起新生产。");
             return;
         }
         if (building.activeOrder != null && building.activeOrder.profile != null)
