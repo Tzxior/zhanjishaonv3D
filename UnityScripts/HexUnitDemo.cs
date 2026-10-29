@@ -210,7 +210,7 @@ public class HexUnitDemo : MonoBehaviour
     private float selectedAttackMultiplier = 1f;
     private HexAttackType selectedAttackType = HexAttackType.Bullet;
     private int selectedAttackCost = 100;
-    private bool selectedAttackNavalOnly, selectedAttackAirOnly, selectedAttackTrueDamage;
+    private bool selectedAttackNavalOnly, selectedAttackAirOnly, selectedAttackTrueDamage, selectedAttackConsumesAmmo;
     private bool transportMode;
     private bool hasSelectedTile;
     private int selectedTileQ;
@@ -1238,7 +1238,27 @@ public class HexUnitDemo : MonoBehaviour
     {
         GetConfiguredActionRange(actionIndex, fallbackMinRange, fallbackMaxRange, out int minRange, out int maxRange);
         int configuredCost = ConfiguredActionAPCost(actionIndex, cost);
-        BeginConfiguredAttack(name, multiplier, type, configuredCost, navalOnly, trueDamage, airOnly, minRange, maxRange);
+        bool consumesAmmo = false;
+
+        if (selectedUnit != null && selectedUnit.actions != null &&
+            actionIndex >= 0 && actionIndex < selectedUnit.actions.Length)
+        {
+            UnitActionProfile action = selectedUnit.actions[actionIndex];
+            if (action != null)
+            {
+                consumesAmmo = action.consumesAmmo;
+                if (action.damageType == "bullet") type = HexAttackType.Bullet;
+                else if (action.damageType == "explosion") type = HexAttackType.Explosion;
+                else if (action.damageType == "true") trueDamage = true;
+
+                if (action.damageType == "bullet" || action.damageType == "explosion" ||
+                    action.damageType == "true")
+                    multiplier = Mathf.Max(0f, action.damageMultiplier);
+            }
+        }
+
+        BeginConfiguredAttack(name, multiplier, type, configuredCost, navalOnly, trueDamage, airOnly,
+            minRange, maxRange, consumesAmmo);
     }
 
     private void HighlightAttackTargets()
@@ -1262,13 +1282,14 @@ public class HexUnitDemo : MonoBehaviour
     }
 
     private void BeginConfiguredAttack(string name, float multiplier, HexAttackType type, int cost,
-        bool navalOnly = false, bool trueDamage = false, bool airOnly = false, int minRange = 1, int maxRange = 1)
+        bool navalOnly = false, bool trueDamage = false, bool airOnly = false,
+        int minRange = 1, int maxRange = 1, bool consumesAmmo = false)
     {
         if (selectedUnit == null || selectedUnit.team != 0 || !IsUnitReady(selectedUnit)) return;
         if (selectedUnit.unitId == "fortress" && !selectedUnit.fortressGarrisoned)
         { statusMessage = "要塞处于机动形态，不能攻击。"; return; }
-        if (selectedUnit.ammoCapacity > 0 && selectedUnit.currentAmmo <= 0)
-        { statusMessage = "弹药不足。"; return; }
+        if (consumesAmmo && (selectedUnit.ammoCapacity <= 0 || selectedUnit.currentAmmo <= 0))
+        { statusMessage = "该技能需要弹药，但当前弹药不足。"; return; }
         moveMode = false;
         attackMode = true;
         supportAction = "";
@@ -1283,6 +1304,7 @@ public class HexUnitDemo : MonoBehaviour
         selectedAttackNavalOnly = navalOnly;
         selectedAttackTrueDamage = trueDamage;
         selectedAttackAirOnly = airOnly;
+        selectedAttackConsumesAmmo = consumesAmmo;
         actionMenuHiddenForTargetSelection = true;
         ClearHighlights();
         HighlightAttackTargets();
@@ -1297,12 +1319,14 @@ public class HexUnitDemo : MonoBehaviour
         { statusMessage = $"目标超出{selectedAttackName}的射程（当前距离 {distance} 格，要求 {selectedAttackMinRange}-{selectedAttackMaxRange}）。"; return; }
         if(selectedAttackNavalOnly && target.unitClass!=HexUnitClass.Naval) { statusMessage="该行动只能攻击海军单位。"; return; }
         if(selectedAttackAirOnly && target.unitClass!=HexUnitClass.Air) { statusMessage="该行动只能攻击空军单位。"; return; }
-        if(selectedUnit.ammoCapacity>0 && selectedUnit.currentAmmo<=0) { statusMessage="弹药不足。"; return; }
+        if(selectedAttackConsumesAmmo && (selectedUnit.ammoCapacity <= 0 || selectedUnit.currentAmmo <= 0))
+        { statusMessage = "该技能需要弹药，但当前弹药不足。"; return; }
         int terrainDefense=battlefield.GetDefenseBonus(target.q,target.r);
         int rawDamage=Mathf.RoundToInt(selectedUnit.attack*selectedAttackMultiplier);
         int damage=selectedAttackTrueDamage?Mathf.Max(1,rawDamage):Mathf.Max(1,rawDamage-GetAttackDefense(target,selectedAttackType)-terrainDefense);
         ApplyDamageAndAwardExperience(selectedUnit,target,damage);
-        if(selectedUnit.ammoCapacity>0) selectedUnit.currentAmmo=Mathf.Max(0,selectedUnit.currentAmmo-1);
+        if (selectedAttackConsumesAmmo)
+            selectedUnit.currentAmmo = Mathf.Max(0, selectedUnit.currentAmmo - 1);
         int actionCost=selectedAttackCost;
         statusMessage=$"{selectedUnit.unitName}使用{selectedAttackName}造成 {damage} 伤害；消耗 {actionCost} AP。";
         if (target.hp <= 0)
