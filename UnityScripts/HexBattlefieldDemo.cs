@@ -370,6 +370,11 @@ public class HexBattlefieldDemo : MonoBehaviour
         if (q == cq + 1 && r >= Mathf.Max(0, cr - 2) && r <= Mathf.Min(rows - 1, cr + 2))
         { terrain = "MountainRoad"; color = new Color(0.56f, 0.40f, 0.29f); return; }
 
+        // The larger second level has two connected coastal pockets, so naval units can manoeuvre.
+        if (columns >= 11 && rows >= 11 &&
+            ((q <= 2 && r >= 7 && r <= 8) || (q >= 8 && q <= 10 && r >= 1 && r <= 3)))
+        { terrain = "Water"; color = new Color(0.16f, 0.36f, 0.55f); return; }
+
         int value = (q * 37 + r * 19 + q * r * 13) % 100;
         if (value < 8) { terrain = "Water"; color = new Color(0.16f, 0.36f, 0.55f); }
         else if (value < 20) { terrain = "Mountain"; color = new Color(0.43f, 0.45f, 0.46f); }
