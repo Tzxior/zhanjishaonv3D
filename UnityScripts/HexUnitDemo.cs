@@ -107,7 +107,7 @@ public class HexUnitDemo : MonoBehaviour
     [Min(1f)] public float pixelsPerUnit = 48f;
     [Min(0.1f)] public float animationFramesPerSecond = 6f;
     [Min(0.1f)] public float iconScale = 1.6f;
-    [Min(0f)] public float liftAboveTile = 0.045f;
+    [Min(0f)] public float unitIconGroundOffset = 0.045f;
     [Min(1f)] public float selectedScaleMultiplier = 1.2f;
     [Tooltip("Enemy action display delay only. It never changes simulated AP.")]
     [Min(0f)] public float enemyActionDisplayDelay = 0.25f;
@@ -1092,7 +1092,7 @@ public class HexUnitDemo : MonoBehaviour
     {
         float size = battlefield.hexSize;
         return new Vector3(1.5f * size * q,
-            battlefield.tileThickness * 0.5f + liftAboveTile,
+            battlefield.tileThickness * 0.5f + unitIconGroundOffset,
             Mathf.Sqrt(3f) * size * (r + q * 0.5f));
     }
 
