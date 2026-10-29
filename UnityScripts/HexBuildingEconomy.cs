@@ -383,12 +383,16 @@ public class HexBuildingEconomy : MonoBehaviour
 
         building.factionBaseRenderer = AddBuildingPart(marker.transform, PrimitiveType.Cylinder, "OwnershipBase",
             new Vector3(0f, 0.025f, 0f), new Vector3(0.70f, 0.035f, 0.70f), OwnerColor(building.ownerTeam), shader);
+        if (building.factionBaseRenderer != null)
+            building.factionBaseRenderer.material = new Material(building.factionBaseRenderer.sharedMaterial);
         CreateBuildingSilhouette(building, shader);
 
         AddBuildingPart(marker.transform, PrimitiveType.Cylinder, "FactionFlagPole",
             new Vector3(0.39f, 0.40f, -0.20f), new Vector3(0.018f, 0.40f, 0.018f), new Color(0.24f, 0.25f, 0.25f), shader);
         building.factionBannerRenderer = AddBuildingPart(marker.transform, PrimitiveType.Cube, "FactionBanner",
             new Vector3(0.51f, 0.62f, -0.20f), new Vector3(0.24f, 0.13f, 0.035f), OwnerColor(building.ownerTeam), shader);
+        if (building.factionBannerRenderer != null)
+            building.factionBannerRenderer.material = new Material(building.factionBannerRenderer.sharedMaterial);
 
         GameObject labelObject = new GameObject("BuildingLabel");
         labelObject.transform.SetParent(marker.transform, false);
