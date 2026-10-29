@@ -799,9 +799,18 @@ public class HexUnitDemo : MonoBehaviour
         return new Rect(x, y, width, height);
     }
 
+    private Rect GetTargetSelectionPromptRect()
+    {
+        float width = Mathf.Min(560f, Screen.width - 24f);
+        return new Rect((Screen.width - width) * 0.5f, 12f, width, 48f);
+    }
+
     private bool PointerOverHud()
     {
         Vector2 p = GetPointerGuiPosition();
+        // During target picking all large panels are hidden, so they cannot block targets underneath them.
+        if (actionMenuHiddenForTargetSelection)
+            return GetTargetSelectionPromptRect().Contains(p);
         if (GetResourcePanelRect().Contains(p) || GetAPTimelinePanelRect().Contains(p))
             return true;
         if (selectedUnit != null && GetUnitInfoPanelRect().Contains(p))
@@ -1640,6 +1649,15 @@ public class HexUnitDemo : MonoBehaviour
     private void OnGUI()
     {
         if (!showBattleHUD || gameplayPaused || battleEnded) return;
+
+        if (actionMenuHiddenForTargetSelection)
+        {
+            Rect promptRect = GetTargetSelectionPromptRect();
+            GUILayout.BeginArea(promptRect, GUI.skin.box);
+            GUILayout.Label(statusMessage);
+            GUILayout.EndArea();
+            return;
+        }
 
         DrawResourceHUD();
         DrawAPTimelineHUD();
