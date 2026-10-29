@@ -1232,7 +1232,8 @@ public class HexUnitDemo : MonoBehaviour
                 enemy.lastFrame = -1;
                 if (enemyActionDisplayDelay > 0f)
                     yield return new WaitForSecondsRealtime(enemyActionDisplayDelay);
-                if (gameplayPaused || battleEnded) yield break;
+                while (gameplayPaused && !battleEnded) yield return null;
+                if (battleEnded) yield break;
             }
         }
 
@@ -1255,7 +1256,8 @@ public class HexUnitDemo : MonoBehaviour
             }
             if (enemyActionDisplayDelay > 0f)
                 yield return new WaitForSecondsRealtime(enemyActionDisplayDelay);
-            if (gameplayPaused || battleEnded) yield break;
+            while (gameplayPaused && !battleEnded) yield return null;
+            if (battleEnded) yield break;
         }
         else if (enemy.canCapture && buildingEconomy != null && buildingEconomy.CanCaptureAt(enemy.q, enemy.r, enemy.team))
         {
@@ -1564,6 +1566,10 @@ public class HexUnitDemo : MonoBehaviour
         Rect rect = GetTileInfoPanelRect();
         GUILayout.BeginArea(rect, GUI.skin.box);
         GUILayout.Label("地块信息");
+        tileInfoScrollPosition = GUILayout.BeginScrollView(
+            tileInfoScrollPosition,
+            GUILayout.Width(rect.width - 10f),
+            GUILayout.Height(rect.height - 34f));
         GUILayout.Label($"坐标：({q},{r})　类型：{battlefield.GetTerrainDisplayName(q, r)}");
         GUILayout.Label($"移动力消耗：步兵 {battlefield.GetMovementPointCost(q, r, HexUnitClass.Infantry)}；重型 {battlefield.GetMovementPointCost(q, r, HexUnitClass.HeavyGround)}；空军 {battlefield.GetMovementPointCost(q, r, HexUnitClass.Air)}");
         GUILayout.Label($"地块 AP 成本：步兵 {TerrainAPCost(q, r, HexUnitClass.Infantry)}；空军 {TerrainAPCost(q, r, HexUnitClass.Air)}");
@@ -1574,6 +1580,7 @@ public class HexUnitDemo : MonoBehaviour
             int owner = battlefield.GetCityOwner(q, r);
             GUILayout.Label($"城市归属：{(owner == 0 ? "我方" : owner == 1 ? "敌方" : "无主")}");
         }
+        GUILayout.EndScrollView();
         GUILayout.EndArea();
     }
 
