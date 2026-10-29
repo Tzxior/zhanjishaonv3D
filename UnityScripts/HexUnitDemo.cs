@@ -107,7 +107,7 @@ public class HexUnitDemo : MonoBehaviour
     [Min(1f)] public float pixelsPerUnit = 48f;
     [Min(0.1f)] public float animationFramesPerSecond = 6f;
     [Min(0.1f)] public float iconScale = 1.6f;
-    [Min(0f)] public float liftAboveTile = 0.12f;
+    [Min(0f)] public float liftAboveTile = 0.045f;
     [Min(1f)] public float selectedScaleMultiplier = 1.2f;
     [Tooltip("Enemy action display delay only. It never changes simulated AP.")]
     [Min(0f)] public float enemyActionDisplayDelay = 0.25f;
@@ -170,6 +170,9 @@ public class HexUnitDemo : MonoBehaviour
         public string rewardSkinId;
         public GameObject factionMarker;
         public Renderer factionMarkerRenderer;
+        public Transform actionHaloTransform;
+        public LineRenderer actionHalo;
+        public float damageFlashUntil;
     }
 
     private class PathNode
@@ -194,6 +197,7 @@ public class HexUnitDemo : MonoBehaviour
     private readonly Dictionary<Vector2Int, PathNode> currentPaths = new Dictionary<Vector2Int, PathNode>();
 
     private UnitInfo selectedUnit;
+    private UnitInfo currentlyActingUnit;
     private Camera mapCamera;
     private Dictionary<string, Sprite[]> blueAnimations;
     private Dictionary<string, Sprite[]> redAnimations;
@@ -359,9 +363,11 @@ public class HexUnitDemo : MonoBehaviour
             if (unit == null) continue;
             if (unit.visual != null) Destroy(unit.visual.gameObject);
             if (unit.factionMarker != null) Destroy(unit.factionMarker);
+            if (unit.actionHaloTransform != null) Destroy(unit.actionHaloTransform.gameObject);
         }
         units.Clear();
         selectedUnit = null;
+        currentlyActingUnit = null;
         hasSelectedTile = false;
         moveMode = attackMode = supportMode = transportMode = false;
         supportAction = "";
@@ -377,6 +383,54 @@ public class HexUnitDemo : MonoBehaviour
     public bool HasUnitProfile(string unitId)
     {
         return !string.IsNullOrWhiteSpace(unitId) && profilesById.ContainsKey(unitId);
+    }
+
+    public HexBuildingEconomy.UnitProductionProfile[] BuildProductionProfilesFromUnitDatabase()
+    {
+        var result = new List<HexBuildingEconomy.UnitProductionProfile>();
+        foreach (UnitBattleProfile profile in profilesById.Values)
+        {
+            if (profile == null || string.IsNullOrWhiteSpace(profile.id)) continue;
+            HexBuildingType[] allowed;
+            switch (profile.unitCategory)
+            {
+                case "infantry": allowed = new[] { HexBuildingType.Arsenal }; break;
+                case "ground_vehicle": allowed = new[] { HexBuildingType.TankFactory }; break;
+                case "artillery": allowed = new[] { HexBuildingType.ArtilleryFactory }; break;
+                case "naval": allowed = new[] { HexBuildingType.Shipyard }; break;
+                case "air": allowed = new[] { HexBuildingType.Airport }; break;
+                default: continue;
+            }
+            result.Add(new HexBuildingEconomy.UnitProductionProfile
+            {
+                unitId = profile.id,
+                displayName = profile.unitName,
+                productionAP = Mathf.Max(1, profile.productionAP),
+                moneyCost = Mathf.Max(0, profile.productionMoneyCost),
+                labourRequired = Mathf.Max(0, profile.productionLabourRequired),
+                ironRequired = Mathf.Max(0, profile.productionIronRequired),
+                aluminiumRequired = Mathf.Max(0, profile.productionAluminiumRequired),
+                allowedBuildings = allowed
+            });
+        }
+        result.Sort((a, b) => string.Compare(a.unitId, b.unitId, StringComparison.Ordinal));
+        return result.ToArray();
+    }
+
+    public bool TryGetUnitAtTile(int q, int r, out int team, out string unitName, out string unitCategory)
+    {
+        UnitInfo unit = FindUnitAt(q, r);
+        if (unit == null)
+        {
+            team = -1;
+            unitName = string.Empty;
+            unitCategory = string.Empty;
+            return false;
+        }
+        team = unit.team;
+        unitName = unit.unitName;
+        unitCategory = unit.unitCategory;
+        return true;
     }
 
     public string[] GetUnitCodexEntries()
@@ -505,6 +559,7 @@ public class HexUnitDemo : MonoBehaviour
         if (battleEnded) return;
         battleEnded = true;
         gameplayPaused = true;
+        currentlyActingUnit = null;
         StopAllCoroutines();
         simulationRunning = false;
         selectedUnit = null;
@@ -623,6 +678,7 @@ public class HexUnitDemo : MonoBehaviour
     private void Update()
     {
         AnimateUnits();
+        UpdateDamageFlashes();
         UpdateUnitVisibility();
 
         // Escape cancels target selection only; the game-flow controller keeps ownership of the pause-menu shortcut.
@@ -749,6 +805,31 @@ public class HexUnitDemo : MonoBehaviour
                 unit.factionMarker.transform.localPosition = FactionMarkerPosition(unit.q, unit.r);
                 if (unit.team != 0 && unit.renderer != null && unit.factionMarkerRenderer != null)
                     unit.factionMarkerRenderer.enabled = unit.renderer.enabled;
+            }
+            if (unit.actionHaloTransform != null)
+                unit.actionHaloTransform.localPosition = FactionMarkerPosition(unit.q, unit.r);
+            if (unit.actionHalo != null)
+            {
+                bool isSelected = unit == selectedUnit;
+                bool isReadyPlayer = !gameplayPaused && !battleEnded && !simulationRunning &&
+                    unit.team == 0 && unit.carrier == null && IsUnitReady(unit);
+                bool isActing = unit == currentlyActingUnit &&
+                    (unit.team == 0 || unit.renderer == null || unit.renderer.enabled);
+                bool show = isSelected || isReadyPlayer || isActing;
+                if (unit.team != 0 && unit.renderer != null && !unit.renderer.enabled && !isSelected)
+                    show = false;
+                unit.actionHalo.enabled = show;
+                if (show)
+                {
+                    Color baseColor = isSelected ? new Color(1f, 0.83f, 0.18f, 1f) :
+                        isActing ? new Color(1f, 0.32f, 0.13f, 1f) :
+                        new Color(0.20f, 0.95f, 1f, 1f);
+                    float pulse = 0.78f + 0.22f *
+                        (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 7f + unit.animationOffset));
+                    Color color = Color.Lerp(Color.black, baseColor, pulse);
+                    unit.actionHalo.startColor = color;
+                    unit.actionHalo.endColor = color;
+                }
             }
         }
     }
@@ -1051,6 +1132,36 @@ public class HexUnitDemo : MonoBehaviour
         }
         unit.factionMarker = marker;
         unit.factionMarkerRenderer = renderer;
+        CreateActionHalo(unit);
+    }
+
+    private void CreateActionHalo(UnitInfo unit)
+    {
+        if (unit == null || battlefield == null) return;
+        GameObject haloObject = new GameObject("UnitActionHighlight");
+        haloObject.transform.SetParent(transform, false);
+        haloObject.transform.localPosition = FactionMarkerPosition(unit.q, unit.r);
+        unit.actionHaloTransform = haloObject.transform;
+
+        LineRenderer line = haloObject.AddComponent<LineRenderer>();
+        line.useWorldSpace = false;
+        line.loop = true;
+        line.positionCount = 6;
+        line.widthMultiplier = Mathf.Max(0.018f, battlefield.hexSize * 0.035f);
+        line.numCapVertices = 2;
+        line.numCornerVertices = 2;
+        Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+        if (shader == null) shader = Shader.Find("Unlit/Color");
+        if (shader == null) shader = Shader.Find("Sprites/Default");
+        if (shader != null) line.material = new Material(shader);
+        float radius = battlefield.hexSize * 0.91f;
+        for (int i = 0; i < 6; i++)
+        {
+            float angle = Mathf.Deg2Rad * (60f * i);
+            line.SetPosition(i, new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius));
+        }
+        line.enabled = false;
+        unit.actionHalo = line;
     }
 
     private void SelectUnit(UnitInfo unit)
@@ -1288,12 +1399,31 @@ public class HexUnitDemo : MonoBehaviour
         if (target == null || damage <= 0) return;
         int actualDamage = Mathf.Min(target.hp, damage);
         target.hp = Mathf.Max(0, target.hp - actualDamage);
+        target.damageFlashUntil = Time.unscaledTime + 0.48f;
         // Being damaged grants 2 XP per point of actual HP lost.
         GrantExperience(target, actualDamage * 2);
         if (target.hp <= 0 && attacker != null)
         {
             // The defeated unit transfers half of its current accumulated XP to the killer.
             GrantExperience(attacker, Mathf.FloorToInt(target.experience * 0.5f));
+        }
+    }
+
+    private void UpdateDamageFlashes()
+    {
+        float now = Time.unscaledTime;
+        foreach (UnitInfo unit in units)
+        {
+            if (unit == null || unit.renderer == null) continue;
+            if (now < unit.damageFlashUntil)
+            {
+                float pulse = 0.5f + 0.5f * Mathf.Sin(now * 34f);
+                unit.renderer.color = Color.Lerp(Color.white, new Color(1f, 0.12f, 0.12f, 1f), pulse);
+            }
+            else if (unit.renderer.color != Color.white)
+            {
+                unit.renderer.color = Color.white;
+            }
         }
     }
 
@@ -1445,6 +1575,7 @@ public class HexUnitDemo : MonoBehaviour
             units.Remove(target);
             if (target.visual != null) Destroy(target.visual.gameObject);
             if (target.factionMarker != null) Destroy(target.factionMarker);
+            if (target.actionHaloTransform != null) Destroy(target.actionHaloTransform.gameObject);
             if (!target.isSkinChest) statusMessage += " 敌方单位被击破。";
             CheckEliminationResult();
         }
@@ -1535,7 +1666,9 @@ public class HexUnitDemo : MonoBehaviour
 
             if (readyEnemy != null)
             {
+                currentlyActingUnit = readyEnemy;
                 yield return StartCoroutine(PerformEnemyActivation(readyEnemy));
+                currentlyActingUnit = null;
                 if (gameplayPaused || battleEnded) break;
                 continue;
             }
