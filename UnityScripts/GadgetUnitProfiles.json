@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 5,
-  "notes": "Based on user-provided 单位信息.csv, not verified original-game official data. v0.2.0 implements configurable attack actions, ammo inventory use, support/healing, fuel/ammo resupply, transport loading/unloading, and fortress stance. Temporary rules and unimplemented powers are documented in Releases/v0.2.0/README_v0.2.0.md. Detection requires observer.reconRange >= target.concealment and distance <= reconRange.",
+  "schemaVersion": 6,
+  "notes": "schemaVersion 6: per-action range uses actions[].rangeConfigured/minRange/maxRange with hex distance. Prototype rules: rockets main weapon 4-8, building capture 0-0, all other action entries default to 1-1 pending detailed balancing. Unit attackRange remains for backward compatibility. Based on user-provided 单位信息.csv, not verified original-game official data. v0.2.0 implements configurable attack actions, ammo inventory use, support/healing, fuel/ammo resupply, transport loading/unloading, and fortress stance. Temporary rules and unimplemented powers are documented in Releases/v0.2.0/README_v0.2.0.md. Detection requires observer.reconRange >= target.concealment and distance <= reconRange.",
   "units": [
     {
       "id": "infantry",
@@ -35,15 +35,24 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "步枪：100%子弹伤害，50 AP"
+          "description": "步枪：100%子弹伤害，50 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         },
         {
           "id": "action_2",
-          "description": "手雷：150%爆炸伤害，50 AP"
+          "description": "手雷：150%爆炸伤害，50 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         },
         {
           "id": "action_3",
-          "description": "占领建筑：100 AP"
+          "description": "占领建筑：100 AP",
+          "rangeConfigured": true,
+          "minRange": 0,
+          "maxRange": 0
         }
       ]
     },
@@ -80,15 +89,24 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "机枪：100%子弹伤害，60 AP"
+          "description": "机枪：100%子弹伤害，60 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         },
         {
           "id": "action_2",
-          "description": "集束手雷：200%爆炸伤害，60 AP"
+          "description": "集束手雷：200%爆炸伤害，60 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         },
         {
           "id": "action_3",
-          "description": "占领建筑：100 AP"
+          "description": "占领建筑：100 AP",
+          "rangeConfigured": true,
+          "minRange": 0,
+          "maxRange": 0
         }
       ]
     },
@@ -126,11 +144,17 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "鼓舞：友军剩余等待 AP 减半，80 AP"
+          "description": "鼓舞：友军剩余等待 AP 减半，80 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         },
         {
           "id": "action_2",
-          "description": "治疗：友军恢复损失生命的 50%，100 AP"
+          "description": "治疗：友军恢复损失生命的 50%，100 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     },
@@ -165,7 +189,10 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "机枪：100%子弹伤害，50 AP"
+          "description": "机枪：100%子弹伤害，50 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     },
@@ -200,7 +227,10 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "炮击：100%爆炸伤害，80 AP"
+          "description": "炮击：100%爆炸伤害，80 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     },
@@ -239,15 +269,24 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "机枪：100%子弹伤害，50 AP"
+          "description": "机枪：100%子弹伤害，50 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         },
         {
           "id": "action_2",
-          "description": "补给：指定单位 +5 燃料，80 AP；+2 弹药，80 AP"
+          "description": "补给：指定单位 +5 燃料，80 AP；+2 弹药，80 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         },
         {
           "id": "action_3",
-          "description": "装货/卸货：100 AP"
+          "description": "装货/卸货：100 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     },
@@ -282,7 +321,10 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "炮击：100%爆炸伤害，80 AP"
+          "description": "炮击：100%爆炸伤害，80 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     },
@@ -317,7 +359,10 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "防空炮击：100%子弹伤害，80 AP"
+          "description": "防空炮击：100%子弹伤害，80 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     },
@@ -354,7 +399,10 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "火箭齐射：100%爆炸伤害，80 AP"
+          "description": "火箭齐射：100%爆炸伤害，80 AP",
+          "rangeConfigured": true,
+          "minRange": 4,
+          "maxRange": 8
         }
       ]
     },
@@ -392,11 +440,17 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "机枪：50%子弹伤害，50 AP"
+          "description": "机枪：50%子弹伤害，50 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         },
         {
           "id": "action_2",
-          "description": "空袭：100%爆炸伤害，80 AP"
+          "description": "空袭：100%爆炸伤害，80 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     },
@@ -431,7 +485,10 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "轰炸：100%爆炸伤害，80 AP"
+          "description": "轰炸：100%爆炸伤害，80 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     },
@@ -469,11 +526,17 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "机枪：100%子弹伤害，50 AP"
+          "description": "机枪：100%子弹伤害，50 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         },
         {
           "id": "action_2",
-          "description": "装货/卸货：100 AP"
+          "description": "装货/卸货：100 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     },
@@ -510,7 +573,10 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "鱼雷攻击：100%爆炸伤害，80 AP；潜航时仅指定反潜单位可命中"
+          "description": "鱼雷攻击：100%爆炸伤害，80 AP；潜航时仅指定反潜单位可命中",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     },
@@ -549,15 +615,24 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "机炮：100%子弹伤害，50 AP"
+          "description": "机炮：100%子弹伤害，50 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         },
         {
           "id": "action_2",
-          "description": "补给：指定单位 +5 燃料，80 AP；+2 弹药，80 AP"
+          "description": "补给：指定单位 +5 燃料，80 AP；+2 弹药，80 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         },
         {
           "id": "action_3",
-          "description": "装货/卸货：100 AP"
+          "description": "装货/卸货：100 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     },
@@ -592,7 +667,10 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "主炮：100%爆炸伤害，80 AP"
+          "description": "主炮：100%爆炸伤害，80 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     },
@@ -631,15 +709,24 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "步枪：100%子弹伤害，40 AP"
+          "description": "步枪：100%子弹伤害，40 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         },
         {
           "id": "action_2",
-          "description": "布雷：200%爆炸伤害，60 AP"
+          "description": "布雷：200%爆炸伤害，60 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         },
         {
           "id": "action_3",
-          "description": "占领建筑：60 AP"
+          "description": "占领建筑：60 AP",
+          "rangeConfigured": true,
+          "minRange": 0,
+          "maxRange": 0
         }
       ]
     },
@@ -674,7 +761,10 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "狙击：100%子弹伤害，80 AP"
+          "description": "狙击：100%子弹伤害，80 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     },
@@ -712,11 +802,17 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "刺杀：100%真实伤害"
+          "description": "刺杀：100%真实伤害",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         },
         {
           "id": "action_2",
-          "description": "破坏建筑：200 AP"
+          "description": "破坏建筑：200 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     },
@@ -751,7 +847,10 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "炮击：100%爆炸伤害，80 AP"
+          "description": "炮击：100%爆炸伤害，80 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     },
@@ -788,7 +887,10 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "驻守炮击：100%爆炸伤害，80 AP；机动形态不能攻击"
+          "description": "驻守炮击：100%爆炸伤害，80 AP；机动形态不能攻击",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     },
@@ -823,7 +925,10 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "空中加油：指定单位 +5 燃料，80 AP"
+          "description": "空中加油：指定单位 +5 燃料，80 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     },
@@ -860,7 +965,10 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "鱼雷攻击：100%爆炸伤害，80 AP；仅攻击海军单位"
+          "description": "鱼雷攻击：100%爆炸伤害，80 AP；仅攻击海军单位",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     },
@@ -898,11 +1006,17 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "舰载机停靠与补给（容量/费用待定）"
+          "description": "舰载机停靠与补给（容量/费用待定）",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         },
         {
           "id": "action_2",
-          "description": "补充指定单位 5 点燃料，80 AP"
+          "description": "补充指定单位 5 点燃料，80 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     },
@@ -940,11 +1054,17 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "舰炮：50%子弹伤害，50 AP"
+          "description": "舰炮：50%子弹伤害，50 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         },
         {
           "id": "action_2",
-          "description": "鱼雷：100%爆炸伤害，80 AP"
+          "description": "鱼雷：100%爆炸伤害，80 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     },
@@ -982,11 +1102,17 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "舰炮/防空：50%子弹伤害，50 AP"
+          "description": "舰炮/防空：50%子弹伤害，50 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         },
         {
           "id": "action_2",
-          "description": "鱼雷/重炮：100%爆炸伤害，80 AP"
+          "description": "鱼雷/重炮：100%爆炸伤害，80 AP",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1
         }
       ]
     }
