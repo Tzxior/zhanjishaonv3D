@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -16,6 +17,8 @@ public enum HexAttackType { Bullet, Explosion }
 /// </summary>
 public class HexUnitDemo : MonoBehaviour
 {
+    public float CurrentBattleAP => battleTimeAP;
+    public event Action<string> SkinChestDefeated;
     [Header("Starting Positions")]
     public Vector2Int[] blueStartingPositions = { new Vector2Int(1, 1), new Vector2Int(2, 3) };
     public Vector2Int[] redStartingPositions = { new Vector2Int(7, 6), new Vector2Int(7, 7) };
@@ -169,6 +172,18 @@ public class HexUnitDemo : MonoBehaviour
 
     private UnitInfo selectedUnit;
     private Camera mapCamera;
+    private Dictionary<string, Sprite[]> blueAnimations;
+    private Dictionary<string, Sprite[]> redAnimations;
+    private HexBuildingEconomy buildingEconomy;
+    private HexGameFlowController gameFlowController;
+    private bool gameplayPaused = true;
+    private bool battleEnded;
+    private float skinAttackMultiplier = 1f;
+    private float skinHPMultiplier = 1f;
+    private float skinBulletDefenseMultiplier = 1f;
+    private float skinExplosionDefenseMultiplier = 1f;
+    private float skinMovementMultiplier = 1f;
+    private float skinProductionCostMultiplier = 1f;
     private HexBattlefieldDemo battlefield;
     private float battleTimeAP;
     private bool simulationRunning;
@@ -201,16 +216,23 @@ public class HexUnitDemo : MonoBehaviour
         }
 
         mapCamera = Camera.main;
-        var blue = LoadDirectionalFrames(blueFramesResourcePath, "我方",
+        blueAnimations = LoadDirectionalFrames(blueFramesResourcePath, "我方",
             new Color32(70, 155, 255, 255), new Color32(235, 245, 255, 255));
-        var red = LoadDirectionalFrames(redFramesResourcePath, "敌方",
+        redAnimations = LoadDirectionalFrames(redFramesResourcePath, "敌方",
             new Color32(235, 75, 70, 255), new Color32(255, 225, 190, 255));
 
         LoadUnitProfileDatabase();
-        SpawnStartingUnits(blueStartingPositions, blueUnitProfiles, blueStartingProfileIds, 0, blue);
-        SpawnStartingUnits(redStartingPositions, redUnitProfiles, redStartingProfileIds, 1, red);
+        SpawnStartingUnits(blueStartingPositions, blueUnitProfiles, blueStartingProfileIds, 0, blueAnimations);
+        SpawnStartingUnits(redStartingPositions, redUnitProfiles, redStartingProfileIds, 1, redAnimations);
         InitializeUniqueActionNodes();
-        statusMessage = "我方操作阶段：移动可选；必须再执行攻击、占领或休整才能结束本次行动。";
+
+        buildingEconomy = GetComponent<HexBuildingEconomy>();
+        if (buildingEconomy == null) buildingEconomy = gameObject.AddComponent<HexBuildingEconomy>();
+        buildingEconomy.InitializeForBattlefield(battlefield, this);
+
+        gameFlowController = GetComponent<HexGameFlowController>();
+        if (gameFlowController == null) gameFlowController = gameObject.AddComponent<HexGameFlowController>();
+        statusMessage = "请从主菜单选择关卡。";
     }
 
     private void LoadUnitProfileDatabase()
@@ -303,6 +325,7 @@ public class HexUnitDemo : MonoBehaviour
     {
         AnimateUnits();
         UpdateUnitVisibility();
+        if (gameplayPaused || battleEnded) return;
         if (WasRightClickPressed()) { DeselectAll(); return; }
         if (!simulationRunning && WasLeftClickPressed() && !PointerOverHud())
             HandleMapClick();
@@ -534,6 +557,7 @@ public class HexUnitDemo : MonoBehaviour
                 bulletDefense=Mathf.Max(0,p.bulletDefense),explosionDefense=Mathf.Max(0,p.explosionDefense),
                 movementPower=Mathf.Max(1,p.movementPower),movementAPLimit=Mathf.Max(1,p.movementAPLimit),
                 attackAP=Mathf.Max(0,p.attackAP),captureAP=Mathf.Max(0,p.captureAP),restAP=Mathf.Max(0,p.restAP),attackRange=Mathf.Max(1,p.attackRange),canCapture=p.canCapture};
+            ApplyActiveSkin(u);
             sr.sprite=animations["down_right"][0];sr.sortingOrder=10;units.Add(u);
         }
     }
