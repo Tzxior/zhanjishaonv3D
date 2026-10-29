@@ -7,7 +7,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 #endif
 
-// Prototype release: v0.2.0 — configurable actions, support and transport.
+// Prototype release: v0.3.0 — battle flow, persistent skins, buildings and production hooks.
 public enum HexAttackType { Bullet, Explosion }
 
 /// <summary>
