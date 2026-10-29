@@ -1958,6 +1958,23 @@ public class HexUnitDemo : MonoBehaviour
         return string.Join("；", list);
     }
 
+    private string ActionDescriptions(UnitBattleProfile profile)
+    {
+        var list = new List<string>();
+        if (profile == null || profile.actions == null) return "";
+        foreach (UnitActionProfile action in profile.actions)
+        {
+            if (action == null || string.IsNullOrWhiteSpace(action.description)) continue;
+            string description = action.description;
+            if (action.rangeConfigured)
+                description += $"（射程 {action.minRange}-{action.maxRange}）";
+            if (action.actionAPCost > 0)
+                description += $"（{action.actionAPCost} AP）";
+            list.Add(description);
+        }
+        return string.Join("；", list);
+    }
+
     private void DrawConfiguredActionButtons(bool ready)
     {
         GUI.enabled = ready && !transportMode && string.IsNullOrEmpty(supportAction);
