@@ -894,7 +894,7 @@ public class HexUnitDemo : MonoBehaviour
         var teamIds = new List<int>();
         foreach (UnitInfo unit in units)
         {
-            if (unit == null || unit.carrier != null) continue;
+            if (unit == null || unit.carrier != null || unit.isSkinChest) continue;
             activeUnits.Add(unit);
             if (!teamIds.Contains(unit.team)) teamIds.Add(unit.team);
         }
