@@ -33,6 +33,22 @@ public class HexGameFlowController : MonoBehaviour
     }
 
     [Serializable]
+    public class FactionDefinition
+    {
+        public string id = "red";
+        public string displayName = "红方";
+        [TextArea(1, 3)] public string description = "红色阵营。";
+        public Color factionColor = new Color(0.86f, 0.16f, 0.21f, 1f);
+        [TextArea(1, 3)] public string futureEffectDescription = "可扩展阵营专属被动与规则。";
+        [Min(0.01f)] public float attackMultiplier = 1f;
+        [Min(0.01f)] public float maxHPMultiplier = 1f;
+        [Min(0.01f)] public float bulletDefenseMultiplier = 1f;
+        [Min(0.01f)] public float explosionDefenseMultiplier = 1f;
+        [Min(0.01f)] public float movementMultiplier = 1f;
+        [Min(0.01f)] public float productionCostMultiplier = 1f;
+    }
+
+    [Serializable]
     public class SkinChestPlacement
     {
         public Vector2Int coordinate;
@@ -58,10 +74,54 @@ public class HexGameFlowController : MonoBehaviour
     [Tooltip("奖励皮肤需要同时存在于 Skin Catalog，并在此配置对应坐标。")]
     public SkinChestPlacement[] skinChests = new SkinChestPlacement[0];
 
+    [Header("Faction Selection")]
+    public FactionDefinition[] factionCatalog =
+    {
+        new FactionDefinition
+        {
+            id = "red", displayName = "红方", description = "默认玩家阵营。",
+            factionColor = new Color(0.86f, 0.16f, 0.21f, 1f),
+            futureEffectDescription = "预留阵营特性配置；当前采用标准规则。"
+        },
+        new FactionDefinition
+        {
+            id = "blue", displayName = "蓝方", description = "蓝色阵营。",
+            factionColor = new Color(0.16f, 0.39f, 0.86f, 1f),
+            futureEffectDescription = "预留阵营特性配置；当前采用标准规则。"
+        },
+        new FactionDefinition
+        {
+            id = "green", displayName = "绿方", description = "绿色阵营。",
+            factionColor = new Color(0.17f, 0.58f, 0.31f, 1f),
+            futureEffectDescription = "预留阵营特性配置；当前采用标准规则。"
+        },
+        new FactionDefinition
+        {
+            id = "yellow", displayName = "黄方", description = "黄色阵营。",
+            factionColor = new Color(0.90f, 0.69f, 0.16f, 1f),
+            futureEffectDescription = "预留阵营特性配置；当前采用标准规则。"
+        },
+        new FactionDefinition
+        {
+            id = "purple", displayName = "紫方", description = "紫色阵营。",
+            factionColor = new Color(0.54f, 0.32f, 0.77f, 1f),
+            futureEffectDescription = "预留阵营特性配置；当前采用标准规则。"
+        },
+        new FactionDefinition
+        {
+            id = "black", displayName = "黑方", description = "黑色阵营。",
+            factionColor = new Color(0.16f, 0.18f, 0.21f, 1f),
+            futureEffectDescription = "预留阵营特性配置；当前采用标准规则。"
+        }
+    };
+    [Tooltip("当前对手的阵营定义 ID；玩家阵营可以在选皮肤页面修改。")]
+    public string opponentFactionId = "blue";
+
     private ScreenState screen = ScreenState.MainMenu;
     private ScreenState settingsReturnScreen = ScreenState.MainMenu;
     private readonly HashSet<string> unlockedSkinIds = new HashSet<string>();
     private string selectedSkinId = "base";
+    private string selectedFactionId = "red";
     private Vector2 unitScroll;
     private Vector2 skinScroll;
     private float masterVolume = 1f;
@@ -119,7 +179,9 @@ public class HexGameFlowController : MonoBehaviour
         }
 
         EnsureSkinCatalog();
+        EnsureFactionCatalog();
         LoadMeta();
+        ApplyCurrentFactionColors();
         battle.SkinChestDefeated += HandleSkinChestDefeated;
         battle.SetGameplayPaused(startInMainMenu);
         battle.showBattleHUD = !startInMainMenu;
@@ -130,6 +192,30 @@ public class HexGameFlowController : MonoBehaviour
     private void OnDestroy()
     {
         if (battle != null) battle.SkinChestDefeated -= HandleSkinChestDefeated;
+    }
+
+    private void EnsureFactionCatalog()
+    {
+        if (factionCatalog == null || factionCatalog.Length == 0)
+        {
+            factionCatalog = new[]
+            {
+                new FactionDefinition { id = "red", displayName = "红方", factionColor = new Color(0.86f, 0.16f, 0.21f, 1f) },
+                new FactionDefinition { id = "blue", displayName = "蓝方", factionColor = new Color(0.16f, 0.39f, 0.86f, 1f) }
+            };
+        }
+        if (GetFaction("red") == null)
+        {
+            var list = new List<FactionDefinition>(factionCatalog);
+            list.Insert(0, new FactionDefinition { id = "red", displayName = "红方", factionColor = new Color(0.86f, 0.16f, 0.21f, 1f) });
+            factionCatalog = list.ToArray();
+        }
+        if (GetFaction("blue") == null)
+        {
+            var list = new List<FactionDefinition>(factionCatalog);
+            list.Add(new FactionDefinition { id = "blue", displayName = "蓝方", factionColor = new Color(0.16f, 0.39f, 0.86f, 1f) });
+            factionCatalog = list.ToArray();
+        }
     }
 
     private void EnsureSkinCatalog()
@@ -160,6 +246,7 @@ public class HexGameFlowController : MonoBehaviour
         AudioListener.volume = masterVolume;
         Screen.fullScreen = fullscreenEnabled;
         selectedSkinId = PlayerPrefs.GetString("ZhanjiShouNv.SelectedSkin", "base");
+        selectedFactionId = PlayerPrefs.GetString("ZhanjiShouNv.SelectedFaction", "red");
 
         unlockedSkinIds.Clear();
         string stored = PlayerPrefs.GetString("ZhanjiShouNv.UnlockedSkins", "base");
@@ -169,12 +256,15 @@ public class HexGameFlowController : MonoBehaviour
 
         if (GetSkin(selectedSkinId) == null || !IsUnlocked(selectedSkinId))
             selectedSkinId = "base";
+        if (GetFaction(selectedFactionId) == null)
+            selectedFactionId = "red";
         SaveMeta();
     }
 
     private void SaveMeta()
     {
         PlayerPrefs.SetString("ZhanjiShouNv.SelectedSkin", selectedSkinId);
+        PlayerPrefs.SetString("ZhanjiShouNv.SelectedFaction", selectedFactionId);
         var ids = new List<string>(unlockedSkinIds);
         ids.Sort(StringComparer.Ordinal);
         PlayerPrefs.SetString("ZhanjiShouNv.UnlockedSkins", string.Join(",", ids));
@@ -189,6 +279,40 @@ public class HexGameFlowController : MonoBehaviour
         foreach (SkinDefinition skin in skinCatalog)
             if (skin != null && string.Equals(skin.id, id, StringComparison.Ordinal)) return skin;
         return null;
+    }
+
+    private FactionDefinition GetFaction(string id)
+    {
+        if (factionCatalog == null) return null;
+        foreach (FactionDefinition faction in factionCatalog)
+            if (faction != null && string.Equals(faction.id, id, StringComparison.Ordinal))
+                return faction;
+        return null;
+    }
+
+    private FactionDefinition SelectedFaction()
+    {
+        FactionDefinition faction = GetFaction(selectedFactionId);
+        return faction != null ? faction : GetFaction("red");
+    }
+
+    private void SetSelectedFaction(string id)
+    {
+        if (GetFaction(id) == null) return;
+        selectedFactionId = id;
+        SaveMeta();
+        ApplyCurrentFactionColors();
+    }
+
+    private void ApplyCurrentFactionColors()
+    {
+        if (battle == null) return;
+        FactionDefinition player = SelectedFaction();
+        FactionDefinition opponent = GetFaction(opponentFactionId);
+        if (player == null) player = GetFaction("red");
+        if (opponent == null) opponent = GetFaction("blue");
+        if (player != null && opponent != null)
+            battle.ConfigureFactionColors(player.factionColor, opponent.factionColor);
     }
 
     private bool IsUnlocked(string id)
@@ -234,13 +358,24 @@ public class HexGameFlowController : MonoBehaviour
     {
         SkinDefinition skin = GetSkin(selectedSkinId);
         if (skin == null) skin = GetSkin("base");
+        FactionDefinition faction = SelectedFaction();
         if (skin != null)
         {
+            float factionAttack = faction != null ? faction.attackMultiplier : 1f;
+            float factionHP = faction != null ? faction.maxHPMultiplier : 1f;
+            float factionBulletDefense = faction != null ? faction.bulletDefenseMultiplier : 1f;
+            float factionExplosionDefense = faction != null ? faction.explosionDefenseMultiplier : 1f;
+            float factionMovement = faction != null ? faction.movementMultiplier : 1f;
+            float factionProductionCost = faction != null ? faction.productionCostMultiplier : 1f;
             battle.ConfigureSkinModifiers(
-                skin.attackMultiplier, skin.maxHPMultiplier,
-                skin.bulletDefenseMultiplier, skin.explosionDefenseMultiplier,
-                skin.movementMultiplier, skin.productionCostMultiplier);
+                skin.attackMultiplier * factionAttack,
+                skin.maxHPMultiplier * factionHP,
+                skin.bulletDefenseMultiplier * factionBulletDefense,
+                skin.explosionDefenseMultiplier * factionExplosionDefense,
+                skin.movementMultiplier * factionMovement,
+                skin.productionCostMultiplier * factionProductionCost);
         }
+        ApplyCurrentFactionColors();
         battle.ResetForNewMatch();
         if (skinChests != null)
         {
@@ -396,15 +531,17 @@ public class HexGameFlowController : MonoBehaviour
 
     private void DrawSkinSelect()
     {
-        GUILayout.Label("选择本关皮肤", TitleStyle());
-        GUILayout.Label("当前选择写入全局存档，其他关卡会继续沿用。");
-        skinScroll = GUILayout.BeginScrollView(skinScroll, GUILayout.Height(440f));
+        GUILayout.Label("选择本关皮肤与阵营", TitleStyle());
+        GUILayout.Label("皮肤决定单位外观与属性；阵营决定我方标记颜色，未来可扩展阵营特性。");
+        skinScroll = GUILayout.BeginScrollView(skinScroll, GUILayout.Height(430f));
+
+        GUILayout.Label("选择皮肤", GUI.skin.box);
         foreach (SkinDefinition skin in skinCatalog)
         {
             if (skin == null) continue;
             bool unlocked = IsUnlocked(skin.id);
             GUILayout.BeginVertical(GUI.skin.box);
-            GUILayout.Label(skin.displayName + (selectedSkinId == skin.id ? "（当前选择）" : ""));
+            GUILayout.Label(skin.displayName + (selectedSkinId == skin.id ? "（当前皮肤）" : ""));
             GUILayout.Label(unlocked ? "已解锁" : "未解锁");
             GUILayout.Label(skin.description);
             GUILayout.Label($"攻击 ×{skin.attackMultiplier:0.##}　生命 ×{skin.maxHPMultiplier:0.##}　移动 ×{skin.movementMultiplier:0.##}");
@@ -414,9 +551,44 @@ public class HexGameFlowController : MonoBehaviour
             GUI.enabled = true;
             GUILayout.EndVertical();
         }
+
+        FactionDefinition currentFaction = SelectedFaction();
+        GUILayout.Space(8);
+        GUILayout.Label("选择我方阵营色", GUI.skin.box);
+        GUILayout.Label("默认：红方。阵营颜色会用于我方单位底环、建筑旗帜与城市归属标记。");
+        if (factionCatalog != null)
+        {
+            for (int i = 0; i < factionCatalog.Length; i += 2)
+            {
+                GUILayout.BeginHorizontal();
+                DrawFactionChoice(factionCatalog[i]);
+                if (i + 1 < factionCatalog.Length) DrawFactionChoice(factionCatalog[i + 1]);
+                GUILayout.EndHorizontal();
+            }
+        }
+        if (currentFaction != null && !string.IsNullOrWhiteSpace(currentFaction.futureEffectDescription))
+            GUILayout.Label("阵营效果： " + currentFaction.futureEffectDescription);
+
         GUILayout.EndScrollView();
-        if (GUILayout.Button("开始 Test001", GUILayout.Height(42))) StartTest001();
+
+        if (GUILayout.Button("开始 Test001", GUILayout.Height(42f))) StartTest001();
         if (GUILayout.Button("返回选关")) screen = ScreenState.LevelSelect;
+    }
+
+    private void DrawFactionChoice(FactionDefinition faction)
+    {
+        if (faction == null) return;
+        Color previous = GUI.color;
+        GUILayout.BeginVertical(GUI.skin.box, GUILayout.ExpandWidth(true));
+        GUI.color = faction.factionColor;
+        GUILayout.Box("　", GUILayout.Width(30f), GUILayout.Height(18f));
+        GUI.color = previous;
+        string colorHex = "#" + ColorUtility.ToHtmlStringRGB(faction.factionColor);
+        GUILayout.Label(faction.displayName + (selectedFactionId == faction.id ? "（当前）" : ""));
+        GUILayout.Label(colorHex);
+        if (GUILayout.Button(selectedFactionId == faction.id ? "已选择" : "选择阵营"))
+            SetSelectedFaction(faction.id);
+        GUILayout.EndVertical();
     }
 
     private void DrawUnitCodex()
