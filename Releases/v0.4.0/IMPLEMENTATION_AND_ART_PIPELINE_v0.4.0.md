@@ -76,7 +76,7 @@ Do not place duplicate copies of the same C# classes under another folder in `As
 12. Confirm the main menu and other front-end screens show an opaque abstract navy background, not the Test001 battlefield. Pause, result and in-battle settings should still show the battlefield.
 13. Verify Pause, Resume, Surrender, restart, AP timing, experience, building capture and factory production.
 
-The factory queue still reads its own Inspector list; JSON production costs are not automatically wired into production until that integration step is implemented.
+When `productionProfiles` is left empty, factory options are now generated from the JSON profile data. A non-empty Inspector list is intentionally treated as an override.
 
 If any error appears, fix the first Console error before testing gameplay rules.
 
