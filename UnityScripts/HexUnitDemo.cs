@@ -53,6 +53,11 @@ public class HexUnitDemo : MonoBehaviour
         [Min(0)] public int restAP=0;
         [Min(1)] public int attackRange=1;
         public bool canCapture=false;
+        [Min(0)] public int productionMoneyCost;
+        [Min(0)] public int productionLabourRequired;
+        [Min(0)] public int productionIronRequired;
+        [Min(0)] public int productionAluminiumRequired;
+        [Min(0)] public int productionAP;
     }
     [System.Serializable] public class UnitActionProfile
     {
@@ -61,6 +66,10 @@ public class HexUnitDemo : MonoBehaviour
         public bool rangeConfigured;
         [Min(0)] public int minRange;
         [Min(0)] public int maxRange;
+        [Min(0)] public int actionAPCost;
+        [Min(0f)] public float damageMultiplier = 1f;
+        public string damageType = "";
+        public bool consumesAmmo;
     }
 
     [Header("Individual Unit Profiles (array order matches starting positions)")]
@@ -318,7 +327,7 @@ public class HexUnitDemo : MonoBehaviour
         {
             UnitBattleProfile p = profilesById[id];
             if (p == null) continue;
-            entries.Add($"{p.unitName} [{p.id}]\n分类：{CategoryName(p.unitCategory)}\n生命 {p.maxHP}　攻击 {p.attackPower}　子弹防御 {p.bulletDefense}　爆炸防御 {p.explosionDefense}\n移动力 {p.movementPower}　范围 {p.attackRange}　攻击 AP {p.attackAP}　弹药 {p.ammoCapacity}　燃料 {p.fuelCapacity}\n{p.description}");
+            entries.Add($"{p.unitName} [{p.id}]\n分类：{CategoryName(p.unitCategory)}\n生命 {p.maxHP}　攻击 {p.attackPower}　子弹防御 {p.bulletDefense}　爆炸防御 {p.explosionDefense}\n移动力 {p.movementPower}　默认射程 {p.attackRange}　攻击 AP {p.attackAP}　弹药 {p.ammoCapacity}　燃料 {p.fuelCapacity}\n造价：金钱 {p.productionMoneyCost}　劳动力 {p.productionLabourRequired}　铁矿 {p.productionIronRequired}　铝矿 {p.productionAluminiumRequired}　生产 AP {p.productionAP}\n行动：{ActionDescriptions(p)}\n{p.description}");
         }
         return entries.ToArray();
     }
@@ -1211,12 +1220,25 @@ public class HexUnitDemo : MonoBehaviour
         return $"{minRange}-{maxRange}";
     }
 
+    private int ConfiguredActionAPCost(int actionIndex, int fallbackCost)
+    {
+        if (selectedUnit != null && selectedUnit.actions != null &&
+            actionIndex >= 0 && actionIndex < selectedUnit.actions.Length)
+        {
+            UnitActionProfile action = selectedUnit.actions[actionIndex];
+            if (action != null && action.actionAPCost > 0)
+                return action.actionAPCost;
+        }
+        return fallbackCost;
+    }
+
     private void BeginProfiledAttack(int actionIndex, string name, float multiplier, HexAttackType type, int cost,
         bool navalOnly = false, bool trueDamage = false, bool airOnly = false,
         int fallbackMinRange = 1, int fallbackMaxRange = 1)
     {
         GetConfiguredActionRange(actionIndex, fallbackMinRange, fallbackMaxRange, out int minRange, out int maxRange);
-        BeginConfiguredAttack(name, multiplier, type, cost, navalOnly, trueDamage, airOnly, minRange, maxRange);
+        int configuredCost = ConfiguredActionAPCost(actionIndex, cost);
+        BeginConfiguredAttack(name, multiplier, type, configuredCost, navalOnly, trueDamage, airOnly, minRange, maxRange);
     }
 
     private void HighlightAttackTargets()
@@ -1892,11 +1914,11 @@ public class HexUnitDemo : MonoBehaviour
         if (GUILayout.Button($"休整（{menuUnit.restAP} AP；结束行动）")) Rest();
         if (selectedUnit != menuUnit) return;
 
-        if (menuUnit.unitId == "fortress" && GUILayout.Button(menuUnit.fortressGarrisoned ? "要塞切换机动形态（0 AP）" : "要塞切换驻守形态（0 AP）"))
+        if (menuUnit.unitId == "fortress" && GUILayout.Button(menuUnit.fortressGarrisoned ? "要塞切换机动形态（100 AP）" : "要塞切换驻守形态（100 AP）"))
         {
             menuUnit.fortressGarrisoned = !menuUnit.fortressGarrisoned;
             statusMessage = menuUnit.fortressGarrisoned ? "要塞已进入驻守形态，可攻击。" : "要塞已进入机动形态，无法攻击。";
-            FinishPlayerActivation(0);
+            FinishPlayerActivation(100);
         }
         if (selectedUnit != menuUnit) return;
 
@@ -1979,7 +2001,7 @@ public class HexUnitDemo : MonoBehaviour
                 if (GUILayout.Button($"防空炮（仅空军，80 AP；射程 {ConfiguredRangeLabel(0)}）")) BeginProfiledAttack(0, "防空炮", 1f, HexAttackType.Bullet, 80, false, false, true);
                 break;
             case "fortress":
-                if (GUILayout.Button($"驻守炮击（80 AP；射程 {ConfiguredRangeLabel(0)}）")) BeginProfiledAttack(0, "驻守炮击", 1f, HexAttackType.Explosion, 80);
+                if (GUILayout.Button($"驻守炮击（{ConfiguredActionAPCost(1, 80)} AP；射程 {ConfiguredRangeLabel(1)}）")) BeginProfiledAttack(1, "驻守炮击", 1f, HexAttackType.Explosion, 80);
                 break;
             case "fighter":
                 if (GUILayout.Button($"机枪（50%，50 AP；射程 {ConfiguredRangeLabel(0)}）")) BeginProfiledAttack(0, "机枪", 0.5f, HexAttackType.Bullet, 50);
