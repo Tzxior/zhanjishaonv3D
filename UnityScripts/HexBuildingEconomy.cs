@@ -65,6 +65,10 @@ public class HexBuildingEconomy : MonoBehaviour
         public Renderer factionBannerRenderer;
         public Renderer factionBaseRenderer;
         public ProductionOrder activeOrder;
+        public float nextReadyTime;
+        public float zeroCostActedAtTime = -1f;
+        public GameObject productionBarRoot;
+        public Renderer productionBarFill;
     }
 
     private sealed class TeamWallet
@@ -111,6 +115,7 @@ public class HexBuildingEconomy : MonoBehaviour
     private Color opponentFactionColor = new Color(0.16f, 0.39f, 0.86f, 1f);
     private readonly Dictionary<Color, Material> generatedMaterials = new Dictionary<Color, Material>();
     private bool resultWasReported;
+    private BuildingPlacement[] levelOneBuildings;
 
     public int PlayerTeamId => 0;
     public event Action<int, int, HexBuildingType> HeadquartersCaptured;
@@ -127,6 +132,8 @@ public class HexBuildingEconomy : MonoBehaviour
 
         battlefield = map;
         unitController = units;
+        if (levelOneBuildings == null && initialBuildings != null)
+            levelOneBuildings = (BuildingPlacement[])initialBuildings.Clone();
         EnsureProductionProfilesFromUnitDatabase();
         if (battlefield == null)
         {
@@ -154,19 +161,53 @@ public class HexBuildingEconomy : MonoBehaviour
         if (markerCamera == null) return;
         foreach (BuildingState building in buildings)
         {
-            if (building == null || building.label == null) continue;
-            Vector3 toCamera = markerCamera.transform.position - building.label.transform.position;
-            if (toCamera.sqrMagnitude > 0.001f)
-                building.label.transform.rotation =
-                    Quaternion.LookRotation(toCamera, Vector3.up) * Quaternion.Euler(0f, 180f, 0f);
+            if (building == null) continue;
+            if (building.label != null)
+            {
+                ProductionOrder order = building.activeOrder;
+                building.label.text = ShortName(building.type) +
+                    (IsFactory(building.type) && order != null && order.profile != null
+                        ? "\\n" + Mathf.Clamp(Mathf.FloorToInt(100f * order.progress /
+                            Mathf.Max(1, order.profile.productionAP)), 0, 100) + "%"
+                        : "");
+                Vector3 toCamera = markerCamera.transform.position - building.label.transform.position;
+                if (toCamera.sqrMagnitude > 0.001f)
+                    building.label.transform.rotation =
+                        Quaternion.LookRotation(toCamera, Vector3.up) * Quaternion.Euler(0f, 180f, 0f);
+            }
+
+            if (building.productionBarRoot != null)
+            {
+                ProductionOrder order = building.activeOrder;
+                bool active = IsFactory(building.type) && order != null && order.profile != null;
+                building.productionBarRoot.SetActive(active);
+                if (active)
+                {
+                    Vector3 toCamera = markerCamera.transform.position - building.productionBarRoot.transform.position;
+                    if (toCamera.sqrMagnitude > 0.001f)
+                        building.productionBarRoot.transform.rotation = Quaternion.LookRotation(toCamera, Vector3.up);
+                    float ratio = Mathf.Clamp01(order.progress / Mathf.Max(1, order.profile.productionAP));
+                    Transform fill = building.productionBarFill != null ? building.productionBarFill.transform : null;
+                    if (fill != null)
+                    {
+                        const float width = 0.90f;
+                        fill.localScale = new Vector3(width * ratio, 0.065f, 0.028f);
+                        fill.localPosition = new Vector3(-width * 0.5f + width * ratio * 0.5f, 0f, -0.018f);
+                    }
+                }
+            }
         }
     }
 
     private void OnDestroy()
     {
         foreach (BuildingState building in buildings)
+        {
             if (building != null && building.marker != null)
                 Destroy(building.marker);
+            if (building != null && building.productionBarRoot != null)
+                Destroy(building.productionBarRoot);
+        }
     }
 
     private TeamWallet EnsureWallet(int team)
@@ -179,12 +220,54 @@ public class HexBuildingEconomy : MonoBehaviour
         return wallet;
     }
 
+    public void ConfigureLevel(int levelIndex)
+    {
+        if (levelOneBuildings == null && initialBuildings != null)
+            levelOneBuildings = (BuildingPlacement[])initialBuildings.Clone();
+
+        if (levelIndex <= 0)
+        {
+            initialBuildings = levelOneBuildings != null
+                ? (BuildingPlacement[])levelOneBuildings.Clone()
+                : new BuildingPlacement[0];
+            startingMoney = 500;
+            startingLabour = 2;
+            return;
+        }
+
+        initialBuildings = new[]
+        {
+            new BuildingPlacement { q = 1, r = 1, type = HexBuildingType.Headquarters, ownerTeam = 0 },
+            new BuildingPlacement { q = 9, r = 9, type = HexBuildingType.Headquarters, ownerTeam = 1 },
+            new BuildingPlacement { q = 5, r = 5, type = HexBuildingType.LargeCity, ownerTeam = -1 },
+            new BuildingPlacement { q = 3, r = 7, type = HexBuildingType.SmallCity, ownerTeam = -1 },
+            new BuildingPlacement { q = 7, r = 3, type = HexBuildingType.SmallCity, ownerTeam = -1 },
+            new BuildingPlacement { q = 2, r = 3, type = HexBuildingType.Village, ownerTeam = -1 },
+            new BuildingPlacement { q = 8, r = 7, type = HexBuildingType.Village, ownerTeam = -1 },
+            new BuildingPlacement { q = 1, r = 4, type = HexBuildingType.Arsenal, ownerTeam = 0 },
+            new BuildingPlacement { q = 2, r = 5, type = HexBuildingType.TankFactory, ownerTeam = -1 },
+            new BuildingPlacement { q = 3, r = 4, type = HexBuildingType.ArtilleryFactory, ownerTeam = -1 },
+            new BuildingPlacement { q = 1, r = 2, type = HexBuildingType.Shipyard, ownerTeam = 0 },
+            new BuildingPlacement { q = 2, r = 4, type = HexBuildingType.Airport, ownerTeam = 0 },
+            new BuildingPlacement { q = 4, r = 2, type = HexBuildingType.IronMine, ownerTeam = 0 },
+            new BuildingPlacement { q = 7, r = 8, type = HexBuildingType.AluminiumMine, ownerTeam = 1 },
+            new BuildingPlacement { q = 8, r = 4, type = HexBuildingType.TankFactory, ownerTeam = 1 },
+            new BuildingPlacement { q = 7, r = 7, type = HexBuildingType.ArtilleryFactory, ownerTeam = 1 }
+        };
+        startingMoney = 700;
+        startingLabour = 4;
+    }
+
     public void ResetForNewBattle(HexUnitDemo driver)
     {
         if (driver != null) unitController = driver;
         foreach (BuildingState building in buildings)
+        {
             if (building != null && building.marker != null)
                 Destroy(building.marker);
+            if (building != null && building.productionBarRoot != null)
+                Destroy(building.productionBarRoot);
+        }
         buildings.Clear();
         buildingsByCoordinate.Clear();
         wallets.Clear();
@@ -433,6 +516,19 @@ public class HexBuildingEconomy : MonoBehaviour
         label.alignment = TextAlignment.Center;
         label.color = OwnerColor(building.ownerTeam);
         building.label = label;
+
+        GameObject barRoot = new GameObject("BuildingProductionProgress");
+        barRoot.transform.SetParent(marker.transform, false);
+        barRoot.transform.localPosition = new Vector3(0f, 1.48f, 0f);
+        barRoot.transform.localScale = Vector3.one;
+        building.productionBarRoot = barRoot;
+        AddBuildingPart(barRoot.transform, PrimitiveType.Cube, "ProgressBackground",
+            Vector3.zero, new Vector3(0.90f, 0.085f, 0.03f), new Color(0.07f, 0.08f, 0.09f), shader);
+        Renderer fill = AddBuildingPart(barRoot.transform, PrimitiveType.Cube, "ProgressFill",
+            new Vector3(-0.45f, 0f, -0.018f), new Vector3(0.90f, 0.065f, 0.028f),
+            new Color(0.15f, 0.80f, 0.90f), shader);
+        building.productionBarFill = fill;
+        barRoot.SetActive(false);
     }
 
     public void SetFactionColors(Color playerColor, Color opponentColor)
@@ -522,7 +618,12 @@ public class HexBuildingEconomy : MonoBehaviour
             cancelledProduction = true;
         }
         building.ownerTeam = newOwner;
-        if (newOwner >= 0) EnsureWallet(newOwner);
+        if (newOwner >= 0)
+        {
+            EnsureWallet(newOwner);
+            if (IsActionQueueBuilding(building.type) && driver != null)
+                ReserveBuildingNextActionNode(q, r, driver.CurrentBattleAP + 1f, driver);
+        }
         if (newOwner >= 0) GrantCaptureLabour(newOwner, building.type);
 
         if ((building.type == HexBuildingType.LargeCity || building.type == HexBuildingType.SmallCity) &&
@@ -848,6 +949,209 @@ public class HexBuildingEconomy : MonoBehaviour
             ReleaseProductionReservation(order);
             building.activeOrder = null;
         }
+    }
+
+    public static bool IsActionQueueBuilding(HexBuildingType type)
+    {
+        return type == HexBuildingType.Headquarters ||
+               type == HexBuildingType.Arsenal ||
+               type == HexBuildingType.TankFactory ||
+               type == HexBuildingType.ArtilleryFactory ||
+               type == HexBuildingType.Shipyard ||
+               type == HexBuildingType.Airport;
+    }
+
+    public Vector2Int[] GetQueuedBuildingCoordinates()
+    {
+        var result = new List<Vector2Int>();
+        foreach (BuildingState building in buildings)
+            if (building != null && building.ownerTeam >= 0 && IsActionQueueBuilding(building.type))
+                result.Add(new Vector2Int(building.q, building.r));
+        return result.ToArray();
+    }
+
+    public bool IsBuildingReady(int q, int r, int team, float ap)
+    {
+        return buildingsByCoordinate.TryGetValue(new Vector2Int(q, r), out BuildingState building) &&
+               building.ownerTeam == team && IsActionQueueBuilding(building.type) &&
+               building.nextReadyTime <= ap + 0.001f &&
+               Mathf.Abs(building.zeroCostActedAtTime - ap) > 0.001f;
+    }
+
+    public bool HasReadyBuilding(int team, float ap)
+    {
+        foreach (BuildingState building in buildings)
+            if (building != null && building.ownerTeam == team &&
+                IsActionQueueBuilding(building.type) &&
+                building.nextReadyTime <= ap + 0.001f &&
+                Mathf.Abs(building.zeroCostActedAtTime - ap) > 0.001f)
+                return true;
+        return false;
+    }
+
+    public bool IsBuildingActionNodeOccupied(float candidate)
+    {
+        foreach (BuildingState building in buildings)
+            if (building != null && building.ownerTeam >= 0 &&
+                IsActionQueueBuilding(building.type) &&
+                Mathf.Abs(building.nextReadyTime - candidate) < 0.001f)
+                return true;
+        return false;
+    }
+
+    public void SetBuildingNextReadyTime(int q, int r, float ap)
+    {
+        if (!buildingsByCoordinate.TryGetValue(new Vector2Int(q, r), out BuildingState building) ||
+            building.ownerTeam < 0 || !IsActionQueueBuilding(building.type)) return;
+        building.nextReadyTime = ap;
+        building.zeroCostActedAtTime = -1f;
+    }
+
+    public float ReserveBuildingNextActionNode(int q, int r, float proposedTime, HexUnitDemo driver)
+    {
+        if (!buildingsByCoordinate.TryGetValue(new Vector2Int(q, r), out BuildingState building) ||
+            building.ownerTeam < 0 || !IsActionQueueBuilding(building.type)) return proposedTime;
+
+        int candidate = Mathf.CeilToInt(proposedTime - 0.001f);
+        int currentNode = Mathf.FloorToInt((driver != null ? driver.CurrentBattleAP : 0f) + 0.001f);
+        if (candidate <= currentNode) candidate = currentNode + 1;
+
+        bool occupied;
+        do
+        {
+            occupied = driver != null && driver.IsUnitActionNodeOccupied(candidate);
+            if (!occupied)
+            {
+                foreach (BuildingState other in buildings)
+                {
+                    if (other == null || other == building || other.ownerTeam < 0 ||
+                        !IsActionQueueBuilding(other.type)) continue;
+                    if (Mathf.Abs(other.nextReadyTime - candidate) < 0.001f)
+                    {
+                        occupied = true;
+                        break;
+                    }
+                }
+            }
+            if (occupied) candidate++;
+        } while (occupied);
+
+        building.nextReadyTime = candidate;
+        building.zeroCostActedAtTime = -1f;
+        return building.nextReadyTime;
+    }
+
+    public bool TryGetBuildingTypeAt(int q, int r, out HexBuildingType type)
+    {
+        if (buildingsByCoordinate.TryGetValue(new Vector2Int(q, r), out BuildingState building))
+        {
+            type = building.type;
+            return true;
+        }
+        type = default;
+        return false;
+    }
+
+    public bool HasActiveProductionAt(int q, int r, out string unitName, out float progress, out float required)
+    {
+        if (buildingsByCoordinate.TryGetValue(new Vector2Int(q, r), out BuildingState building) &&
+            building.activeOrder != null && building.activeOrder.profile != null)
+        {
+            unitName = building.activeOrder.profile.displayName;
+            progress = building.activeOrder.progress;
+            required = Mathf.Max(1, building.activeOrder.profile.productionAP);
+            return true;
+        }
+        unitName = string.Empty;
+        progress = required = 0f;
+        return false;
+    }
+
+    public bool StartProductionAt(int q, int r, int team, string unitId,
+        HexUnitDemo driver, out int actionCost, out string result)
+    {
+        actionCost = 0;
+        result = string.Empty;
+        if (!buildingsByCoordinate.TryGetValue(new Vector2Int(q, r), out BuildingState building) ||
+            !IsFactory(building.type))
+        {
+            result = "该建筑不能生产单位。";
+            return false;
+        }
+        if (building.ownerTeam != team)
+        {
+            result = "没有控制该工厂。";
+            return false;
+        }
+        int occupiedTeam;
+        string ignoredName, ignoredCategory;
+        if (driver != null && driver.TryGetUnitAtTile(q, r, out occupiedTeam, out ignoredName, out ignoredCategory))
+        {
+            result = "工厂地块被单位占用，暂时不能开始生产。";
+            return false;
+        }
+
+        UnitProductionProfile selected = null;
+        if (productionProfiles != null)
+            foreach (UnitProductionProfile profile in productionProfiles)
+                if (profile != null && profile.unitId == unitId && ProfileAllows(profile, building.type))
+                { selected = profile; break; }
+
+        if (selected == null)
+        {
+            result = "该工厂没有配置此单位的生产方案。";
+            return false;
+        }
+        if (!CanStartProduction(building, team, selected, out result, driver)) return false;
+        if (!StartProduction(building, team, selected, driver, out result)) return false;
+        actionCost = Mathf.Max(1, selected.productionAP);
+        return true;
+    }
+
+    public void DrawProductionActionChoices(int viewingTeam, int q, int r, HexUnitDemo driver, bool canAct)
+    {
+        if (!buildingsByCoordinate.TryGetValue(new Vector2Int(q, r), out BuildingState building) ||
+            !IsFactory(building.type)) return;
+
+        int occupiedTeam;
+        string occupiedName, occupiedCategory;
+        bool occupied = driver != null &&
+            driver.TryGetUnitAtTile(q, r, out occupiedTeam, out occupiedName, out occupiedCategory);
+        if (occupied)
+        {
+            GUILayout.Label("驻扎单位：" + occupiedName + "；工厂被占用，不能发起新生产。");
+            return;
+        }
+        if (building.activeOrder != null && building.activeOrder.profile != null)
+        {
+            ProductionOrder order = building.activeOrder;
+            GUILayout.Label($"当前订单：{order.profile.displayName}　{100f * Mathf.Clamp01(order.progress / Mathf.Max(1, order.profile.productionAP)):0}%");
+            GUILayout.Label("订单完成前该工厂不能开始另一个生产命令。");
+            return;
+        }
+        if (viewingTeam != 0 || building.ownerTeam != viewingTeam)
+        {
+            GUILayout.Label("仅建筑控制方可以生产。");
+            return;
+        }
+
+        GUILayout.Label("生产单位");
+        bool oldEnabled = GUI.enabled;
+        if (productionProfiles != null)
+        {
+            foreach (UnitProductionProfile profile in productionProfiles)
+            {
+                if (profile == null || !ProfileAllows(profile, building.type)) continue;
+                bool canStart = CanStartProduction(building, viewingTeam, profile, out string reason, driver);
+                GUI.enabled = oldEnabled && canAct && canStart;
+                if (GUILayout.Button($"生产：{profile.displayName}（{profile.productionAP} AP）"))
+                {
+                    if (driver != null) driver.TryStartBuildingProductionFromMenu(q, r, profile.unitId);
+                }
+                if (!string.IsNullOrEmpty(reason)) GUILayout.Label(reason);
+            }
+        }
+        GUI.enabled = oldEnabled;
     }
 
     public string GetDescriptionAt(int q, int r)
