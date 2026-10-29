@@ -20,7 +20,9 @@ public class HexUnitDemo : MonoBehaviour
     public float CurrentBattleAP => battleTimeAP;
     public event Action<string> SkinChestDefeated;
     [Header("Starting Positions")]
+    [InspectorName("Player starting positions (team 0; default red)")]
     public Vector2Int[] blueStartingPositions = { new Vector2Int(1, 1), new Vector2Int(2, 3) };
+    [InspectorName("Opponent starting positions (team 1; default blue)")]
     public Vector2Int[] redStartingPositions = { new Vector2Int(7, 6), new Vector2Int(7, 7) };
 
     [System.Serializable] public class UnitBattleProfile
@@ -73,12 +75,14 @@ public class HexUnitDemo : MonoBehaviour
     }
 
     [Header("Individual Unit Profiles (array order matches starting positions)")]
+    [InspectorName("Player unit profiles (team 0)")]
     [Tooltip("每个部署单位独立配置；单位详细资料优先从 GadgetUnitProfiles.json 读取。")]
     public UnitBattleProfile[] blueUnitProfiles =
     {
         new UnitBattleProfile { unitName="步兵", unitClass=HexUnitClass.Infantry, maxHP=100, attackPower=20, attackType=HexAttackType.Bullet, bulletDefense=10, explosionDefense=8, movementPower=6, movementAPLimit=100, attackAP=100, captureAP=50, restAP=0, attackRange=1 },
         new UnitBattleProfile { unitName="重型地面单位", unitClass=HexUnitClass.HeavyGround, maxHP=140, attackPower=30, attackType=HexAttackType.Explosion, bulletDefense=20, explosionDefense=15, movementPower=4, movementAPLimit=100, attackAP=120, captureAP=60, restAP=0, attackRange=1 }
     };
+    [InspectorName("Opponent unit profiles (team 1)")]
     public UnitBattleProfile[] redUnitProfiles =
     {
         new UnitBattleProfile { id="infantry", unitName="敌方步兵", unitClass=HexUnitClass.Infantry, maxHP=100, attackPower=20, attackType=HexAttackType.Bullet, bulletDefense=10, explosionDefense=8, movementPower=6, movementAPLimit=100, attackAP=100, captureAP=50, restAP=0, attackRange=1 },
@@ -88,7 +92,9 @@ public class HexUnitDemo : MonoBehaviour
     [Header("Unit Data File")]
     [Tooltip("放在 Assets/Resources/GadgetUnitProfiles.json；不存在时使用 Inspector 内的备用配置。")]
     public string unitDatabaseResourcePath = "GadgetUnitProfiles";
+    [InspectorName("Player starting profile IDs (team 0)")]
     public string[] blueStartingProfileIds = { "infantry", "heavy_infantry" };
+    [InspectorName("Opponent starting profile IDs (team 1)")]
     public string[] redStartingProfileIds = { "infantry", "heavy_infantry" };
 
     [Header("Sprite Resources")]
@@ -943,7 +949,7 @@ public class HexUnitDemo : MonoBehaviour
             if(FindUnitAt(q,r)!=null){Debug.LogWarning($"地块 ({q},{r}) 已有单位。");continue;}
             string profileId=profileIds!=null&&i<profileIds.Length?profileIds[i]:"";
             UnitBattleProfile p=ResolveProfile(profileId,fallbackProfiles,i);
-            GameObject icon=new GameObject(team==0?"BlueUnitIcon":"RedUnitIcon");
+            GameObject icon=new GameObject(team==0?"PlayerUnitIcon":"OpponentUnitIcon");
             icon.transform.SetParent(transform,false);icon.transform.localPosition=HexToLocalPosition(q,r);icon.transform.localScale=Vector3.one*iconScale;
             SpriteRenderer sr=icon.AddComponent<SpriteRenderer>();
             var u=new UnitInfo{
