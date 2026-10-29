@@ -578,6 +578,7 @@ public class HexUnitDemo : MonoBehaviour
             reconRange = 0, concealment = 0, isSkinChest = true, rewardSkinId = skinId,
             nextReadyTime = float.PositiveInfinity, ammoCapacity = 0, fuelCapacity = 0, resourceCapacity = 0
         });
+        CreateUnitStatusBars(units[units.Count - 1]);
     }
 
     public void ApplyBuildingRestorationAt(int q, int r, int ownerTeam, HexBuildingType type)
@@ -1536,14 +1537,30 @@ public class HexUnitDemo : MonoBehaviour
         }
         teamIds.Sort();
 
+        // Mix each team's units and queued buildings before assigning AP slots. Otherwise
+        // appending buildings after the unit list would put every building behind every unit.
         var actors = new List<InitialQueueActor>();
-        foreach (UnitInfo unit in activeUnits)
-            actors.Add(new InitialQueueActor { team = unit.team, unit = unit, isBuilding = false });
-        foreach (Vector2Int coordinate in queuedBuildings)
+        foreach (int teamId in teamIds)
         {
-            if (buildingEconomy.TryGetBuildingAt(coordinate.x, coordinate.y,
-                out string name, out int owner, out HexBuildingType type))
-                actors.Add(new InitialQueueActor { team = owner, building = coordinate, isBuilding = true });
+            var teamUnits = new List<InitialQueueActor>();
+            var teamBuildings = new List<InitialQueueActor>();
+            foreach (UnitInfo unit in activeUnits)
+                if (unit.team == teamId)
+                    teamUnits.Add(new InitialQueueActor { team = unit.team, unit = unit, isBuilding = false });
+            foreach (Vector2Int coordinate in queuedBuildings)
+            {
+                if (buildingEconomy.TryGetBuildingAt(coordinate.x, coordinate.y,
+                    out string name, out int owner, out HexBuildingType type) && owner == teamId)
+                    teamBuildings.Add(new InitialQueueActor { team = owner, building = coordinate, isBuilding = true });
+            }
+
+            int unitIndex = 0;
+            int buildingIndex = 0;
+            while (unitIndex < teamUnits.Count || buildingIndex < teamBuildings.Count)
+            {
+                if (unitIndex < teamUnits.Count) actors.Add(teamUnits[unitIndex++]);
+                if (buildingIndex < teamBuildings.Count) actors.Add(teamBuildings[buildingIndex++]);
+            }
         }
 
         var assigned = new HashSet<InitialQueueActor>();
