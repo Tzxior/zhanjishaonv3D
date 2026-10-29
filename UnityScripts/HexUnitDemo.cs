@@ -441,7 +441,9 @@ public class HexUnitDemo : MonoBehaviour
         bool hostileAlive = false;
         foreach (UnitInfo unit in units)
         {
-            if (unit == null || unit.isSkinChest || unit.carrier != null || unit.hp <= 0) continue;
+            if (unit == null || unit.carrier != null || unit.hp <= 0) continue;
+            // Reward chests count as hostile units while elimination victory is enabled,
+            // so a match cannot end before the player has a chance to collect the reward.
             if (unit.team == 0) playerAlive = true;
             else hostileAlive = true;
         }
