@@ -1023,10 +1023,54 @@ public class HexUnitDemo : MonoBehaviour
         return new Rect(12f, Screen.height - height - 12f, width, height);
     }
 
+    private bool IsBuildingSelected()
+    {
+        if (selectedBuildingQ < 0 || selectedBuildingR < 0 || buildingEconomy == null) return false;
+        return buildingEconomy.TryGetBuildingAt(selectedBuildingQ, selectedBuildingR,
+            out string ignoredName, out int owner, out HexBuildingType ignoredType) && owner == 0;
+    }
+
+    public void SelectBuildingAt(int q, int r)
+    {
+        if (buildingEconomy == null ||
+            !buildingEconomy.TryGetBuildingAt(q, r, out string name, out int owner, out HexBuildingType type) ||
+            owner != 0 || !HexBuildingEconomy.IsActionQueueBuilding(type)) return;
+        if (selectedUnit != null && selectedUnit.team == 0 && selectedUnit.hasMovedThisActivation)
+        {
+            statusMessage = "当前单位已移动，请先完成它的非移动行动，再切换建筑。";
+            return;
+        }
+        if (selectedUnit != null && selectedUnit.visual != null)
+            selectedUnit.visual.localScale = selectedUnit.baseScale;
+        selectedUnit = null;
+        selectedBuildingQ = q;
+        selectedBuildingR = r;
+        selectedTileQ = q;
+        selectedTileR = r;
+        hasSelectedTile = true;
+        actionMenuScreenPosition = GetPointerGuiPosition();
+        actionMenuScrollPosition = Vector2.zero;
+        moveMode = attackMode = supportMode = transportMode = false;
+        supportAction = "";
+        actionMenuHiddenForTargetSelection = false;
+        ClearHighlights();
+        float nextReady = GetBuildingNextReadyTime(q, r);
+        bool ready = buildingEconomy.IsBuildingReady(q, r, 0, battleTimeAP);
+        statusMessage = ready ? $"{name}行动节点已就绪。" :
+            $"{name}下次可行动时间：AP {nextReady:0}。";
+    }
+
+    private float GetBuildingNextReadyTime(int q, int r)
+    {
+        return buildingEconomy != null &&
+            buildingEconomy.TryGetBuildingAt(q, r, out string ignoredName, out int owner,
+                out HexBuildingType ignoredType, out float nextReadyTime) ? nextReadyTime : battleTimeAP;
+    }
+
     private bool IsActionMenuVisible()
     {
-        return selectedUnit != null && selectedUnit.team == 0 && !simulationRunning &&
-               showBattleHUD && !actionMenuHiddenForTargetSelection;
+        return !simulationRunning && showBattleHUD && !actionMenuHiddenForTargetSelection &&
+               ((selectedUnit != null && selectedUnit.team == 0) || IsBuildingSelected());
     }
 
     private Rect GetActionMenuRect()
@@ -1076,6 +1120,15 @@ public class HexUnitDemo : MonoBehaviour
         UnitInfo clicked=FindUnitAt(q,r);
         if(clicked!=null && clicked.team==1 && clicked.renderer!=null && !clicked.renderer.enabled)
             clicked=null;
+
+        if (clicked == null && buildingEconomy != null &&
+            buildingEconomy.TryGetBuildingAt(q, r, out string clickedBuildingName, out int clickedBuildingOwner,
+                out HexBuildingType clickedBuildingType) &&
+            clickedBuildingOwner == 0 && HexBuildingEconomy.IsActionQueueBuilding(clickedBuildingType))
+        {
+            SelectBuildingAt(q, r);
+            return;
+        }
         if(selectedUnit!=null && selectedUnit.team==0 && transportMode)
         {
             if(clicked!=null && clicked.team==0 && clicked!=selectedUnit) { TryLoadCargo(clicked); return; }
@@ -1111,6 +1164,7 @@ public class HexUnitDemo : MonoBehaviour
 
     private void DeselectAll()
     {
+        selectedBuildingQ = selectedBuildingR = -1;
         if (selectedUnit != null && selectedUnit.visual != null)
             selectedUnit.visual.localScale = selectedUnit.baseScale;
         selectedUnit = null;
@@ -1351,6 +1405,7 @@ public class HexUnitDemo : MonoBehaviour
 
     private void SelectUnit(UnitInfo unit)
     {
+        selectedBuildingQ = selectedBuildingR = -1;
         if (selectedUnit != null && selectedUnit.visual != null)
             selectedUnit.visual.localScale = selectedUnit.baseScale;
         selectedUnit = unit;
@@ -1785,9 +1840,7 @@ public class HexUnitDemo : MonoBehaviour
         {
             if (target.isSkinChest) SkinChestDefeated?.Invoke(target.rewardSkinId);
             units.Remove(target);
-            if (target.visual != null) Destroy(target.visual.gameObject);
-            if (target.factionMarker != null) Destroy(target.factionMarker);
-            if (target.actionHaloTransform != null) Destroy(target.actionHaloTransform.gameObject);
+            DestroyUnitPresentation(target);
             if (!target.isSkinChest) statusMessage += " 敌方单位被击破。";
             CheckEliminationResult();
         }
@@ -2400,9 +2453,17 @@ public class HexUnitDemo : MonoBehaviour
     private void DrawActionMenuHUD()
     {
         if (!IsActionMenuVisible()) return;
-        UnitInfo menuUnit = selectedUnit;
         Rect rect = GetActionMenuRect();
         GUILayout.BeginArea(rect, GUI.skin.box);
+        if (IsBuildingSelected())
+        {
+            DrawBuildingActionMenuContent();
+            GUILayout.EndArea();
+            GUI.enabled = true;
+            return;
+        }
+
+        UnitInfo menuUnit = selectedUnit;
         GUILayout.Label($"行动菜单：{menuUnit.unitName}");
         actionMenuScrollPosition = GUILayout.BeginScrollView(
             actionMenuScrollPosition,
@@ -2414,6 +2475,60 @@ public class HexUnitDemo : MonoBehaviour
             GUILayout.Label(statusMessage);
         GUILayout.EndArea();
         GUI.enabled = true;
+    }
+
+    private void DrawBuildingActionMenuContent()
+    {
+        if (!IsBuildingSelected()) return;
+        buildingEconomy.TryGetBuildingAt(selectedBuildingQ, selectedBuildingR,
+            out string name, out int owner, out HexBuildingType type, out float nextReady);
+        bool ready = buildingEconomy.IsBuildingReady(selectedBuildingQ, selectedBuildingR, 0, battleTimeAP);
+        GUILayout.Label("建筑行动菜单：" + name);
+        GUILayout.Label(ready ? "行动状态：就绪" : $"行动状态：等待 {Mathf.Max(0, Mathf.CeilToInt(nextReady - battleTimeAP))} AP");
+
+        GUI.enabled = ready;
+        if (type == HexBuildingType.Headquarters)
+        {
+            if (GUILayout.Button("待机（500 AP；无额外效果）"))
+                FinishBuildingActivation(selectedBuildingQ, selectedBuildingR, 500);
+        }
+        else
+        {
+            buildingEconomy.DrawProductionActionChoices(0, selectedBuildingQ, selectedBuildingR, this, ready);
+            GUI.enabled = ready;
+            if (GUILayout.Button("闲置（100 AP；无额外效果）"))
+                FinishBuildingActivation(selectedBuildingQ, selectedBuildingR, 100);
+        }
+        GUI.enabled = true;
+        if (!string.IsNullOrEmpty(statusMessage)) GUILayout.Label(statusMessage);
+    }
+
+    public void TryStartBuildingProductionFromMenu(int q, int r, string unitId)
+    {
+        if (buildingEconomy == null || !buildingEconomy.IsBuildingReady(q, r, 0, battleTimeAP)) return;
+        if (!buildingEconomy.StartProductionAt(q, r, 0, unitId, this, out int actionCost, out string result))
+        {
+            statusMessage = result;
+            return;
+        }
+        statusMessage = result + $" 工厂下次可行动时间基准为 AP {battleTimeAP + actionCost:0}。";
+        FinishBuildingActivation(q, r, actionCost);
+    }
+
+    private void FinishBuildingActivation(int q, int r, int actionCost)
+    {
+        if (buildingEconomy == null) return;
+        float next = buildingEconomy.ReserveBuildingNextActionNode(q, r,
+            battleTimeAP + Mathf.Max(0, actionCost), this);
+        selectedBuildingQ = selectedBuildingR = -1;
+        hasSelectedTile = false;
+        moveMode = attackMode = supportMode = transportMode = false;
+        supportAction = "";
+        actionMenuHiddenForTargetSelection = false;
+        ClearHighlights();
+        statusMessage = $"建筑行动结束：消耗 {actionCost} AP；下次可行动时间为 AP {next:0}。";
+        if (!gameplayPaused && !battleEnded && !HasReadyPlayerActor())
+            StartCoroutine(RunSimulationUntilPlayerCanAct());
     }
 
     private void DrawActionMenuContent(UnitInfo menuUnit)
@@ -2636,14 +2751,38 @@ public class HexUnitDemo : MonoBehaviour
         if (battlefield != null) battlefield.SetActionHighlights(targets);
     }
 
+    private bool CanSupplyFuel(UnitInfo unit)
+    {
+        return unit != null && unit.fuelCapacity > 0 &&
+            (unit.unitId == "apc" || unit.unitId == "transport_ship" ||
+             unit.unitId == "transport_aircraft" || unit.unitId == "refuel_aircraft" ||
+             unit.unitId == "aircraft_carrier");
+    }
+
+    private bool CanSupplyAmmo(UnitInfo unit)
+    {
+        return unit != null && unit.ammoCapacity > 0 &&
+            (unit.unitId == "apc" || unit.unitId == "transport_ship" ||
+             unit.unitId == "transport_aircraft" || unit.unitId == "aircraft_carrier");
+    }
+
     private void DrawSupportButtons(bool ready)
     {
-        if(!ready||selectedUnit==null||attackMode||transportMode) return;
-        if(selectedUnit.unitId=="medic")
-        { if(GUILayout.Button("治疗友军（恢复损血的50%，100 AP）")) BeginSupportMode("heal"); if(GUILayout.Button("鼓舞友军（等待AP减半，80 AP）")) BeginSupportMode("inspire"); }
-        if(selectedUnit.unitId=="apc"||selectedUnit.unitId=="transport_ship")
-        { if(selectedUnit.currentFuel>=5&&GUILayout.Button("补给燃料 +5（80 AP）")) BeginSupportMode("fuel"); if(selectedUnit.currentAmmo>=2&&GUILayout.Button("补给弹药 +2（80 AP）")) BeginSupportMode("ammo"); }
-        if((selectedUnit.unitId=="refuel_aircraft"||selectedUnit.unitId=="aircraft_carrier")&&selectedUnit.currentFuel>=5&&GUILayout.Button("加油 +5（80 AP）")) BeginSupportMode("fuel");
+        if (!ready || selectedUnit == null || attackMode || transportMode) return;
+        if (selectedUnit.unitId == "medic")
+        {
+            if (GUILayout.Button("治疗友军（恢复损血的50%，100 AP）")) BeginSupportMode("heal");
+            if (GUILayout.Button("鼓舞友军（等待AP减半，80 AP）")) BeginSupportMode("inspire");
+        }
+
+        bool oldEnabled = GUI.enabled;
+        GUI.enabled = oldEnabled && selectedUnit.currentFuel >= 5;
+        if (CanSupplyFuel(selectedUnit) && GUILayout.Button("补给燃料 +5（80 AP；消耗自身燃料）"))
+            BeginSupportMode("fuel");
+        GUI.enabled = oldEnabled && selectedUnit.currentAmmo >= 2;
+        if (CanSupplyAmmo(selectedUnit) && GUILayout.Button("补给弹药 +2（80 AP；消耗自身弹药）"))
+            BeginSupportMode("ammo");
+        GUI.enabled = oldEnabled;
     }
     private void BeginSupportMode(string action)
     {
@@ -2657,13 +2796,26 @@ public class HexUnitDemo : MonoBehaviour
         var targets = new List<Vector2Int>();
         if (selectedUnit != null)
         {
+            bool enoughSupply = action == "fuel" ? CanSupplyFuel(selectedUnit) && selectedUnit.currentFuel >= 5 :
+                                action == "ammo" ? CanSupplyAmmo(selectedUnit) && selectedUnit.currentAmmo >= 2 : true;
+            if (!enoughSupply)
+            {
+                statusMessage = action == "fuel" ? "自身燃料不足，无法执行补给。" : "自身弹药不足，无法执行补给。";
+                supportAction = "";
+                supportMode = false;
+                actionMenuHiddenForTargetSelection = false;
+                return;
+            }
+
             foreach (UnitInfo unit in units)
             {
                 if (unit == null || unit == selectedUnit || unit.team != selectedUnit.team || unit.carrier != null)
                     continue;
                 if (HexDistance(new Vector2Int(selectedUnit.q, selectedUnit.r),
-                    new Vector2Int(unit.q, unit.r)) <= 1)
-                    targets.Add(new Vector2Int(unit.q, unit.r));
+                    new Vector2Int(unit.q, unit.r)) > 1) continue;
+                if (action == "fuel" && (unit.fuelCapacity <= 0 || unit.currentFuel >= unit.fuelCapacity)) continue;
+                if (action == "ammo" && (unit.ammoCapacity <= 0 || unit.currentAmmo >= unit.ammoCapacity)) continue;
+                targets.Add(new Vector2Int(unit.q, unit.r));
             }
         }
         if (battlefield != null) battlefield.SetActionHighlights(targets);
@@ -2675,8 +2827,26 @@ public class HexUnitDemo : MonoBehaviour
         int cost=80;
         if(supportAction=="heal") { int amount=Mathf.FloorToInt(Mathf.Max(0,target.maxHp-target.hp)*0.5f); if(amount<=0){statusMessage="目标不需要治疗。";return;} target.hp=Mathf.Min(target.maxHp,target.hp+amount);cost=100;statusMessage=$"{target.unitName}恢复 {amount} HP。"; }
         else if(supportAction=="inspire") { float remain=Mathf.Max(0,target.nextReadyTime-battleTimeAP);if(remain<=0){statusMessage="目标已就绪。";return;}ReserveNextActionNode(target,battleTimeAP+remain*0.5f);statusMessage=$"{target.unitName}等待AP减半。"; }
-        else if(supportAction=="fuel") { if(selectedUnit.currentFuel<5||target.fuelCapacity<=0||target.currentFuel>=target.fuelCapacity){statusMessage="燃料补给条件不满足。";return;}int n=Mathf.Min(5,target.fuelCapacity-target.currentFuel);selectedUnit.currentFuel-=n;target.currentFuel+=n;statusMessage=$"补充燃料 {n}。"; }
-        else if(supportAction=="ammo") { if(selectedUnit.currentAmmo<2||target.ammoCapacity<=0||target.currentAmmo>=target.ammoCapacity){statusMessage="弹药补给条件不满足。";return;}int n=Mathf.Min(2,target.ammoCapacity-target.currentAmmo);selectedUnit.currentAmmo-=n;target.currentAmmo+=n;statusMessage=$"补充弹药 {n}。"; }
+        else if (supportAction == "fuel")
+        {
+            if (!CanSupplyFuel(selectedUnit) || selectedUnit.currentFuel < 5 ||
+                target.fuelCapacity <= 0 || target.currentFuel >= target.fuelCapacity)
+            { statusMessage = "燃料补给条件不满足：需要至少 5 单位自身燃料，且目标有可补充空间。"; return; }
+            int amount = Mathf.Min(5, target.fuelCapacity - target.currentFuel);
+            selectedUnit.currentFuel -= amount;
+            target.currentFuel += amount;
+            statusMessage = $"补充燃料 {amount}；补给单位剩余燃料 {selectedUnit.currentFuel}/{selectedUnit.fuelCapacity}。";
+        }
+        else if (supportAction == "ammo")
+        {
+            if (!CanSupplyAmmo(selectedUnit) || selectedUnit.currentAmmo < 2 ||
+                target.ammoCapacity <= 0 || target.currentAmmo >= target.ammoCapacity)
+            { statusMessage = "弹药补给条件不满足：需要至少 2 发自身弹药，且目标有可补充空间。"; return; }
+            int amount = Mathf.Min(2, target.ammoCapacity - target.currentAmmo);
+            selectedUnit.currentAmmo -= amount;
+            target.currentAmmo += amount;
+            statusMessage = $"补充弹药 {amount}；补给单位剩余弹药 {selectedUnit.currentAmmo}/{selectedUnit.ammoCapacity}。";
+        }
         supportAction="";supportMode=false;FinishPlayerActivation(cost);
     }
     private void TryLoadCargo(UnitInfo passenger)
