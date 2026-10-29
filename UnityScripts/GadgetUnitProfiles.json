@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 6,
-  "notes": "schemaVersion 6: per-action range uses actions[].rangeConfigured/minRange/maxRange with hex distance. Prototype rules: rockets main weapon 4-8, building capture 0-0, all other action entries default to 1-1 pending detailed balancing. Unit attackRange remains for backward compatibility. Based on user-provided 单位信息.csv, not verified original-game official data. v0.2.0 implements configurable attack actions, ammo inventory use, support/healing, fuel/ammo resupply, transport loading/unloading, and fortress stance. Temporary rules and unimplemented powers are documented in Releases/v0.2.0/README_v0.2.0.md. Detection requires observer.reconRange >= target.concealment and distance <= reconRange.",
+  "schemaVersion": 7,
+  "notes": "Schema v7 updated from the user's latest uploaded 单位信息(1).csv. Combat stats, movement, default range, ammo/fuel/cargo, reconnaissance/concealment and production costs match this table. Each non-empty action column is preserved as action_1/action_2/action_3 with parsed AP cost, damage multiplier/type, ammo consumption and min/max range. Explicit 距离x-y values override the unit default; building capture and stance switch use 0-0; other actions without explicit distance use 1-单位射程. Two栖 maps to the existing Naval movement enum because this prototype does not yet define a distinct amphibious class.",
   "units": [
     {
       "id": "infantry",
@@ -35,26 +35,43 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "步枪：100%子弹伤害，50 AP",
+          "description": "100%子弹伤害，50ap，距离1-1",
           "rangeConfigured": true,
           "minRange": 1,
-          "maxRange": 1
+          "maxRange": 1,
+          "actionAPCost": 50,
+          "damageMultiplier": 1,
+          "damageType": "bullet",
+          "consumesAmmo": false
         },
         {
           "id": "action_2",
-          "description": "手雷：150%爆炸伤害，50 AP",
+          "description": "150%爆炸伤害，50ap，距离1-1，消耗弹药",
           "rangeConfigured": true,
           "minRange": 1,
-          "maxRange": 1
+          "maxRange": 1,
+          "actionAPCost": 50,
+          "damageMultiplier": 1.5,
+          "damageType": "explosion",
+          "consumesAmmo": true
         },
         {
           "id": "action_3",
-          "description": "占领建筑：100 AP",
+          "description": "占领建筑，100ap，距离0-0",
           "rangeConfigured": true,
           "minRange": 0,
-          "maxRange": 0
+          "maxRange": 0,
+          "actionAPCost": 100,
+          "damageMultiplier": 1,
+          "damageType": "capture",
+          "consumesAmmo": false
         }
-      ]
+      ],
+      "productionMoneyCost": 100,
+      "productionLabourRequired": 1,
+      "productionIronRequired": 0,
+      "productionAluminiumRequired": 0,
+      "productionAP": 100
     },
     {
       "id": "heavy_infantry",
@@ -69,7 +86,7 @@
       "movementPower": 4,
       "movementAPLimit": 100,
       "attackAP": 60,
-      "captureAP": 100,
+      "captureAP": 150,
       "restAP": 0,
       "attackRange": 1,
       "canCapture": true,
@@ -89,26 +106,43 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "机枪：100%子弹伤害，60 AP",
+          "description": "100%子弹伤害，60ap，距离1-1",
           "rangeConfigured": true,
           "minRange": 1,
-          "maxRange": 1
+          "maxRange": 1,
+          "actionAPCost": 60,
+          "damageMultiplier": 1,
+          "damageType": "bullet",
+          "consumesAmmo": false
         },
         {
           "id": "action_2",
-          "description": "集束手雷：200%爆炸伤害，60 AP",
+          "description": "200%爆炸伤害，60ap，距离1-1，消耗弹药",
           "rangeConfigured": true,
           "minRange": 1,
-          "maxRange": 1
+          "maxRange": 1,
+          "actionAPCost": 60,
+          "damageMultiplier": 2,
+          "damageType": "explosion",
+          "consumesAmmo": true
         },
         {
           "id": "action_3",
-          "description": "占领建筑：100 AP",
+          "description": "占领建筑，150ap，距离0-0",
           "rangeConfigured": true,
           "minRange": 0,
-          "maxRange": 0
+          "maxRange": 0,
+          "actionAPCost": 150,
+          "damageMultiplier": 1,
+          "damageType": "capture",
+          "consumesAmmo": false
         }
-      ]
+      ],
+      "productionMoneyCost": 200,
+      "productionLabourRequired": 1,
+      "productionIronRequired": 0,
+      "productionAluminiumRequired": 0,
+      "productionAP": 100
     },
     {
       "id": "medic",
@@ -144,535 +178,32 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "鼓舞：友军剩余等待 AP 减半，80 AP",
+          "description": "特殊，友军等待ap-50%，80ap，距离1-1",
           "rangeConfigured": true,
           "minRange": 1,
-          "maxRange": 1
+          "maxRange": 1,
+          "actionAPCost": 80,
+          "damageMultiplier": 0.5,
+          "damageType": "support",
+          "consumesAmmo": false
         },
         {
           "id": "action_2",
-          "description": "治疗：友军恢复损失生命的 50%，100 AP",
+          "description": "特殊，友军回复50%损失生命，100ap，距离1-1，消耗弹药",
           "rangeConfigured": true,
           "minRange": 1,
-          "maxRange": 1
+          "maxRange": 1,
+          "actionAPCost": 100,
+          "damageMultiplier": 0.5,
+          "damageType": "support",
+          "consumesAmmo": true
         }
-      ]
-    },
-    {
-      "id": "scout",
-      "unitName": "侦察车",
-      "unitCategory": "ground_vehicle",
-      "unitClass": 1,
-      "maxHP": 110,
-      "attackPower": 35,
-      "attackType": 0,
-      "bulletDefense": 40,
-      "explosionDefense": 20,
-      "movementPower": 8,
-      "movementAPLimit": 100,
-      "attackAP": 50,
-      "captureAP": 0,
-      "restAP": 0,
-      "attackRange": 1,
-      "canCapture": false,
-      "ammoCapacity": 0,
-      "fuelCapacity": 20,
-      "description": "拥有极高侦察能力，是唯一能够发现间谍的单位。弹药容量尚待确定。",
-      "specialAbilities": [
-        "机枪"
       ],
-      "reconRange": 8,
-      "concealment": 2,
-      "canDetectSpy": true,
-      "resourceCapacity": 0,
-      "dataGaps": [],
-      "actions": [
-        {
-          "id": "action_1",
-          "description": "机枪：100%子弹伤害，50 AP",
-          "rangeConfigured": true,
-          "minRange": 1,
-          "maxRange": 1
-        }
-      ]
-    },
-    {
-      "id": "tank",
-      "unitName": "战车",
-      "unitCategory": "ground_vehicle",
-      "unitClass": 1,
-      "maxHP": 150,
-      "attackPower": 60,
-      "attackType": 1,
-      "bulletDefense": 60,
-      "explosionDefense": 40,
-      "movementPower": 6,
-      "movementAPLimit": 100,
-      "attackAP": 80,
-      "captureAP": 0,
-      "restAP": 0,
-      "attackRange": 1,
-      "canCapture": false,
-      "ammoCapacity": 10,
-      "fuelCapacity": 20,
-      "description": "机动性、攻击力与防御力均衡的高级地面单位。",
-      "specialAbilities": [
-        "炮击"
-      ],
-      "reconRange": 3,
-      "concealment": 0,
-      "canDetectSpy": false,
-      "resourceCapacity": 0,
-      "dataGaps": [],
-      "actions": [
-        {
-          "id": "action_1",
-          "description": "炮击：100%爆炸伤害，80 AP",
-          "rangeConfigured": true,
-          "minRange": 1,
-          "maxRange": 1
-        }
-      ]
-    },
-    {
-      "id": "apc",
-      "unitName": "运输车",
-      "unitCategory": "ground_vehicle",
-      "unitClass": 1,
-      "maxHP": 130,
-      "attackPower": 25,
-      "attackType": 0,
-      "bulletDefense": 50,
-      "explosionDefense": 30,
-      "movementPower": 6,
-      "movementAPLimit": 100,
-      "attackAP": 50,
-      "captureAP": 0,
-      "restAP": 0,
-      "attackRange": 1,
-      "canCapture": false,
-      "ammoCapacity": 20,
-      "fuelCapacity": 50,
-      "description": "可运输资源，为相邻地面友军补充燃料与弹药；可免费攻击地面目标。",
-      "specialAbilities": [
-        "机枪",
-        "补给",
-        "装货/卸货"
-      ],
-      "reconRange": 3,
-      "concealment": 1,
-      "canDetectSpy": false,
-      "resourceCapacity": 2,
-      "dataGaps": [
-        "载量数值已录入，但资源类型、堆叠和装卸规则待定义"
-      ],
-      "actions": [
-        {
-          "id": "action_1",
-          "description": "机枪：100%子弹伤害，50 AP",
-          "rangeConfigured": true,
-          "minRange": 1,
-          "maxRange": 1
-        },
-        {
-          "id": "action_2",
-          "description": "补给：指定单位 +5 燃料，80 AP；+2 弹药，80 AP",
-          "rangeConfigured": true,
-          "minRange": 1,
-          "maxRange": 1
-        },
-        {
-          "id": "action_3",
-          "description": "装货/卸货：100 AP",
-          "rangeConfigured": true,
-          "minRange": 1,
-          "maxRange": 1
-        }
-      ]
-    },
-    {
-      "id": "self_propelled_gun",
-      "unitName": "自走炮",
-      "unitCategory": "artillery",
-      "unitClass": 1,
-      "maxHP": 100,
-      "attackPower": 60,
-      "attackType": 1,
-      "bulletDefense": 10,
-      "explosionDefense": 10,
-      "movementPower": 5,
-      "movementAPLimit": 100,
-      "attackAP": 80,
-      "captureAP": 0,
-      "restAP": 0,
-      "attackRange": 4,
-      "canCapture": false,
-      "ammoCapacity": 6,
-      "fuelCapacity": 20,
-      "description": "远程火力单位。",
-      "specialAbilities": [
-        "炮击"
-      ],
-      "reconRange": 4,
-      "concealment": 0,
-      "canDetectSpy": false,
-      "resourceCapacity": 0,
-      "dataGaps": [],
-      "actions": [
-        {
-          "id": "action_1",
-          "description": "炮击：100%爆炸伤害，80 AP",
-          "rangeConfigured": true,
-          "minRange": 1,
-          "maxRange": 1
-        }
-      ]
-    },
-    {
-      "id": "anti_air",
-      "unitName": "防空炮",
-      "unitCategory": "artillery",
-      "unitClass": 1,
-      "maxHP": 90,
-      "attackPower": 60,
-      "attackType": 0,
-      "bulletDefense": 10,
-      "explosionDefense": 20,
-      "movementPower": 5,
-      "movementAPLimit": 100,
-      "attackAP": 80,
-      "captureAP": 0,
-      "restAP": 0,
-      "attackRange": 4,
-      "canCapture": false,
-      "ammoCapacity": 10,
-      "fuelCapacity": 20,
-      "description": "专用防空单位。",
-      "specialAbilities": [
-        "防空炮击"
-      ],
-      "reconRange": 4,
-      "concealment": 0,
-      "canDetectSpy": false,
-      "resourceCapacity": 0,
-      "dataGaps": [],
-      "actions": [
-        {
-          "id": "action_1",
-          "description": "防空炮击：100%子弹伤害，80 AP",
-          "rangeConfigured": true,
-          "minRange": 1,
-          "maxRange": 1
-        }
-      ]
-    },
-    {
-      "id": "rockets",
-      "unitName": "火箭炮",
-      "unitCategory": "artillery",
-      "unitClass": 1,
-      "maxHP": 90,
-      "attackPower": 80,
-      "attackType": 1,
-      "bulletDefense": 10,
-      "explosionDefense": 10,
-      "movementPower": 5,
-      "movementAPLimit": 100,
-      "attackAP": 80,
-      "captureAP": 0,
-      "restAP": 0,
-      "attackRange": 6,
-      "canCapture": false,
-      "ammoCapacity": 20,
-      "fuelCapacity": 20,
-      "description": "无法攻击近距离目标；可消耗更多 AP 同时攻击多个单位。",
-      "specialAbilities": [
-        "火箭齐射"
-      ],
-      "reconRange": 4,
-      "concealment": 0,
-      "canDetectSpy": false,
-      "resourceCapacity": 0,
-      "dataGaps": [
-        "多目标攻击的目标上限与额外 AP 未指定"
-      ],
-      "actions": [
-        {
-          "id": "action_1",
-          "description": "火箭齐射：100%爆炸伤害，80 AP",
-          "rangeConfigured": true,
-          "minRange": 4,
-          "maxRange": 8
-        }
-      ]
-    },
-    {
-      "id": "fighter",
-      "unitName": "战斗机",
-      "unitCategory": "air",
-      "unitClass": 2,
-      "maxHP": 100,
-      "attackPower": 40,
-      "attackType": 0,
-      "bulletDefense": 20,
-      "explosionDefense": 20,
-      "movementPower": 12,
-      "movementAPLimit": 100,
-      "attackAP": 50,
-      "captureAP": 80,
-      "restAP": 0,
-      "attackRange": 1,
-      "canCapture": true,
-      "ammoCapacity": 6,
-      "fuelCapacity": 10,
-      "description": "高速空战单位。",
-      "specialAbilities": [
-        "机枪",
-        "空袭"
-      ],
-      "reconRange": 7,
-      "concealment": 0,
-      "canDetectSpy": false,
-      "resourceCapacity": 0,
-      "dataGaps": [
-        "不同攻击动作的实际目标类别限制与伤害公式待落地"
-      ],
-      "actions": [
-        {
-          "id": "action_1",
-          "description": "机枪：50%子弹伤害，50 AP",
-          "rangeConfigured": true,
-          "minRange": 1,
-          "maxRange": 1
-        },
-        {
-          "id": "action_2",
-          "description": "空袭：100%爆炸伤害，80 AP",
-          "rangeConfigured": true,
-          "minRange": 1,
-          "maxRange": 1
-        }
-      ]
-    },
-    {
-      "id": "bomber",
-      "unitName": "轰炸机",
-      "unitCategory": "air",
-      "unitClass": 2,
-      "maxHP": 90,
-      "attackPower": 100,
-      "attackType": 1,
-      "bulletDefense": 20,
-      "explosionDefense": 20,
-      "movementPower": 10,
-      "movementAPLimit": 100,
-      "attackAP": 80,
-      "captureAP": 0,
-      "restAP": 0,
-      "attackRange": 1,
-      "canCapture": false,
-      "ammoCapacity": 4,
-      "fuelCapacity": 10,
-      "description": "高伤害轰炸单位。",
-      "specialAbilities": [
-        "轰炸"
-      ],
-      "reconRange": 6,
-      "concealment": 0,
-      "canDetectSpy": false,
-      "resourceCapacity": 0,
-      "dataGaps": [],
-      "actions": [
-        {
-          "id": "action_1",
-          "description": "轰炸：100%爆炸伤害，80 AP",
-          "rangeConfigured": true,
-          "minRange": 1,
-          "maxRange": 1
-        }
-      ]
-    },
-    {
-      "id": "transport_aircraft",
-      "unitName": "运输机",
-      "unitCategory": "air",
-      "unitClass": 2,
-      "maxHP": 110,
-      "attackPower": 30,
-      "attackType": 0,
-      "bulletDefense": 20,
-      "explosionDefense": 20,
-      "movementPower": 10,
-      "movementAPLimit": 100,
-      "attackAP": 50,
-      "captureAP": 0,
-      "restAP": 0,
-      "attackRange": 1,
-      "canCapture": false,
-      "ammoCapacity": 20,
-      "fuelCapacity": 20,
-      "description": "可运输资源，为相邻地面友军补充燃料与弹药；可免费攻击地面目标。",
-      "specialAbilities": [
-        "机枪",
-        "装货/卸货"
-      ],
-      "reconRange": 6,
-      "concealment": 0,
-      "canDetectSpy": false,
-      "resourceCapacity": 2,
-      "dataGaps": [
-        "载量数值已录入，但资源类型、堆叠和装卸规则待定义"
-      ],
-      "actions": [
-        {
-          "id": "action_1",
-          "description": "机枪：100%子弹伤害，50 AP",
-          "rangeConfigured": true,
-          "minRange": 1,
-          "maxRange": 1
-        },
-        {
-          "id": "action_2",
-          "description": "装货/卸货：100 AP",
-          "rangeConfigured": true,
-          "minRange": 1,
-          "maxRange": 1
-        }
-      ]
-    },
-    {
-      "id": "sub",
-      "unitName": "潜水艇",
-      "unitCategory": "naval",
-      "unitClass": 3,
-      "maxHP": 80,
-      "attackPower": 50,
-      "attackType": 1,
-      "bulletDefense": 20,
-      "explosionDefense": 20,
-      "movementPower": 4,
-      "movementAPLimit": 100,
-      "attackAP": 80,
-      "captureAP": 0,
-      "restAP": 0,
-      "attackRange": 2,
-      "canCapture": false,
-      "ammoCapacity": 4,
-      "fuelCapacity": 20,
-      "description": "潜航单位；只能被驱逐舰、巡洋舰和鱼雷机的鱼雷攻击命中。",
-      "specialAbilities": [
-        "鱼雷攻击"
-      ],
-      "reconRange": 2,
-      "concealment": 4,
-      "canDetectSpy": false,
-      "resourceCapacity": 0,
-      "dataGaps": [
-        "潜航状态如何切换及具体反潜命中规则待定义"
-      ],
-      "actions": [
-        {
-          "id": "action_1",
-          "description": "鱼雷攻击：100%爆炸伤害，80 AP；潜航时仅指定反潜单位可命中",
-          "rangeConfigured": true,
-          "minRange": 1,
-          "maxRange": 1
-        }
-      ]
-    },
-    {
-      "id": "transport_ship",
-      "unitName": "运输舰",
-      "unitCategory": "naval",
-      "unitClass": 3,
-      "maxHP": 120,
-      "attackPower": 20,
-      "attackType": 0,
-      "bulletDefense": 10,
-      "explosionDefense": 10,
-      "movementPower": 6,
-      "movementAPLimit": 100,
-      "attackAP": 50,
-      "captureAP": 0,
-      "restAP": 0,
-      "attackRange": 1,
-      "canCapture": false,
-      "ammoCapacity": 20,
-      "fuelCapacity": 20,
-      "description": "可运输资源，为相邻海面友军补充燃料与弹药；可免费攻击地面目标。",
-      "specialAbilities": [
-        "机炮",
-        "补给",
-        "装货/卸货"
-      ],
-      "reconRange": 4,
-      "concealment": 0,
-      "canDetectSpy": false,
-      "resourceCapacity": 5,
-      "dataGaps": [
-        "载量数值已录入，但资源类型、堆叠和装卸规则待定义"
-      ],
-      "actions": [
-        {
-          "id": "action_1",
-          "description": "机炮：100%子弹伤害，50 AP",
-          "rangeConfigured": true,
-          "minRange": 1,
-          "maxRange": 1
-        },
-        {
-          "id": "action_2",
-          "description": "补给：指定单位 +5 燃料，80 AP；+2 弹药，80 AP",
-          "rangeConfigured": true,
-          "minRange": 1,
-          "maxRange": 1
-        },
-        {
-          "id": "action_3",
-          "description": "装货/卸货：100 AP",
-          "rangeConfigured": true,
-          "minRange": 1,
-          "maxRange": 1
-        }
-      ]
-    },
-    {
-      "id": "battleship",
-      "unitName": "战列舰",
-      "unitCategory": "naval",
-      "unitClass": 3,
-      "maxHP": 240,
-      "attackPower": 100,
-      "attackType": 1,
-      "bulletDefense": 80,
-      "explosionDefense": 60,
-      "movementPower": 5,
-      "movementAPLimit": 100,
-      "attackAP": 80,
-      "captureAP": 0,
-      "restAP": 0,
-      "attackRange": 8,
-      "canCapture": false,
-      "ammoCapacity": 20,
-      "fuelCapacity": 40,
-      "description": "续航、防御与远程炮击能力强。",
-      "specialAbilities": [
-        "主炮"
-      ],
-      "reconRange": 6,
-      "concealment": 0,
-      "canDetectSpy": false,
-      "resourceCapacity": 0,
-      "dataGaps": [],
-      "actions": [
-        {
-          "id": "action_1",
-          "description": "主炮：100%爆炸伤害，80 AP",
-          "rangeConfigured": true,
-          "minRange": 1,
-          "maxRange": 1
-        }
-      ]
+      "productionMoneyCost": 300,
+      "productionLabourRequired": 1,
+      "productionIronRequired": 0,
+      "productionAluminiumRequired": 0,
+      "productionAP": 100
     },
     {
       "id": "engineer",
@@ -709,26 +240,43 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "步枪：100%子弹伤害，40 AP",
+          "description": "100%子弹伤害，40ap",
           "rangeConfigured": true,
           "minRange": 1,
-          "maxRange": 1
+          "maxRange": 1,
+          "actionAPCost": 40,
+          "damageMultiplier": 1,
+          "damageType": "bullet",
+          "consumesAmmo": false
         },
         {
           "id": "action_2",
-          "description": "布雷：200%爆炸伤害，60 AP",
+          "description": "埋地雷，200%爆炸伤害，60ap，距离1-1，消耗弹药",
           "rangeConfigured": true,
           "minRange": 1,
-          "maxRange": 1
+          "maxRange": 1,
+          "actionAPCost": 60,
+          "damageMultiplier": 2,
+          "damageType": "explosion",
+          "consumesAmmo": true
         },
         {
           "id": "action_3",
-          "description": "占领建筑：60 AP",
+          "description": "占领建筑，60ap",
           "rangeConfigured": true,
           "minRange": 0,
-          "maxRange": 0
+          "maxRange": 0,
+          "actionAPCost": 60,
+          "damageMultiplier": 1,
+          "damageType": "capture",
+          "consumesAmmo": false
         }
-      ]
+      ],
+      "productionMoneyCost": 200,
+      "productionLabourRequired": 1,
+      "productionIronRequired": 0,
+      "productionAluminiumRequired": 0,
+      "productionAP": 100
     },
     {
       "id": "sniper",
@@ -760,13 +308,22 @@
       "dataGaps": [],
       "actions": [
         {
-          "id": "action_1",
-          "description": "狙击：100%子弹伤害，80 AP",
+          "id": "action_2",
+          "description": "狙击，100%子弹伤害，80ap，距离1-5，消耗弹药",
           "rangeConfigured": true,
           "minRange": 1,
-          "maxRange": 1
+          "maxRange": 5,
+          "actionAPCost": 80,
+          "damageMultiplier": 1,
+          "damageType": "bullet",
+          "consumesAmmo": true
         }
-      ]
+      ],
+      "productionMoneyCost": 300,
+      "productionLabourRequired": 1,
+      "productionIronRequired": 0,
+      "productionAluminiumRequired": 0,
+      "productionAP": 100
     },
     {
       "id": "spy",
@@ -801,20 +358,200 @@
       ],
       "actions": [
         {
-          "id": "action_1",
-          "description": "刺杀：100%真实伤害",
+          "id": "action_2",
+          "description": "刺杀，100%真实伤害，距离1-1，消耗弹药",
           "rangeConfigured": true,
           "minRange": 1,
-          "maxRange": 1
+          "maxRange": 1,
+          "actionAPCost": 0,
+          "damageMultiplier": 1,
+          "damageType": "true",
+          "consumesAmmo": true
+        },
+        {
+          "id": "action_3",
+          "description": "破坏建筑，200ap",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1,
+          "actionAPCost": 200,
+          "damageMultiplier": 1,
+          "damageType": "sabotage",
+          "consumesAmmo": false
+        }
+      ],
+      "productionMoneyCost": 500,
+      "productionLabourRequired": 1,
+      "productionIronRequired": 0,
+      "productionAluminiumRequired": 0,
+      "productionAP": 100
+    },
+    {
+      "id": "scout",
+      "unitName": "侦察车",
+      "unitCategory": "ground_vehicle",
+      "unitClass": 1,
+      "maxHP": 110,
+      "attackPower": 35,
+      "attackType": 0,
+      "bulletDefense": 40,
+      "explosionDefense": 20,
+      "movementPower": 8,
+      "movementAPLimit": 100,
+      "attackAP": 50,
+      "captureAP": 0,
+      "restAP": 0,
+      "attackRange": 1,
+      "canCapture": false,
+      "ammoCapacity": 0,
+      "fuelCapacity": 20,
+      "description": "拥有极高侦察能力，是唯一能够发现间谍的单位。弹药容量尚待确定。",
+      "specialAbilities": [
+        "机枪"
+      ],
+      "reconRange": 8,
+      "concealment": 2,
+      "canDetectSpy": true,
+      "resourceCapacity": 0,
+      "dataGaps": [],
+      "actions": [
+        {
+          "id": "action_1",
+          "description": "100%子弹伤害，50ap",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1,
+          "actionAPCost": 50,
+          "damageMultiplier": 1,
+          "damageType": "bullet",
+          "consumesAmmo": false
+        }
+      ],
+      "productionMoneyCost": 300,
+      "productionLabourRequired": 2,
+      "productionIronRequired": 1,
+      "productionAluminiumRequired": 0,
+      "productionAP": 100
+    },
+    {
+      "id": "tank",
+      "unitName": "战车",
+      "unitCategory": "ground_vehicle",
+      "unitClass": 1,
+      "maxHP": 150,
+      "attackPower": 60,
+      "attackType": 1,
+      "bulletDefense": 60,
+      "explosionDefense": 40,
+      "movementPower": 6,
+      "movementAPLimit": 100,
+      "attackAP": 80,
+      "captureAP": 0,
+      "restAP": 0,
+      "attackRange": 1,
+      "canCapture": false,
+      "ammoCapacity": 10,
+      "fuelCapacity": 20,
+      "description": "机动性、攻击力与防御力均衡的高级地面单位。",
+      "specialAbilities": [
+        "炮击"
+      ],
+      "reconRange": 3,
+      "concealment": 0,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [],
+      "actions": [
+        {
+          "id": "action_2",
+          "description": "100%爆炸伤害，80ap，距离1-1，消耗弹药",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1,
+          "actionAPCost": 80,
+          "damageMultiplier": 1,
+          "damageType": "explosion",
+          "consumesAmmo": true
+        }
+      ],
+      "productionMoneyCost": 600,
+      "productionLabourRequired": 2,
+      "productionIronRequired": 2,
+      "productionAluminiumRequired": 0,
+      "productionAP": 200
+    },
+    {
+      "id": "apc",
+      "unitName": "运输车",
+      "unitCategory": "ground_vehicle",
+      "unitClass": 1,
+      "maxHP": 130,
+      "attackPower": 25,
+      "attackType": 0,
+      "bulletDefense": 50,
+      "explosionDefense": 30,
+      "movementPower": 6,
+      "movementAPLimit": 100,
+      "attackAP": 50,
+      "captureAP": 0,
+      "restAP": 0,
+      "attackRange": 1,
+      "canCapture": false,
+      "ammoCapacity": 20,
+      "fuelCapacity": 50,
+      "description": "可运输资源，为相邻地面友军补充燃料与弹药；可免费攻击地面目标。",
+      "specialAbilities": [
+        "机枪",
+        "补给",
+        "装货/卸货"
+      ],
+      "reconRange": 3,
+      "concealment": 1,
+      "canDetectSpy": false,
+      "resourceCapacity": 2,
+      "dataGaps": [
+        "载量数值已录入，但资源类型、堆叠和装卸规则待定义"
+      ],
+      "actions": [
+        {
+          "id": "action_1",
+          "description": "100%子弹伤害，50ap",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1,
+          "actionAPCost": 50,
+          "damageMultiplier": 1,
+          "damageType": "bullet",
+          "consumesAmmo": false
         },
         {
           "id": "action_2",
-          "description": "破坏建筑：200 AP",
+          "description": "补充指定单位5点燃料，80ap",
           "rangeConfigured": true,
           "minRange": 1,
-          "maxRange": 1
+          "maxRange": 1,
+          "actionAPCost": 80,
+          "damageMultiplier": 1,
+          "damageType": "support",
+          "consumesAmmo": false
+        },
+        {
+          "id": "action_3",
+          "description": "补充指定单位2点弹药，80ap",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1,
+          "actionAPCost": 80,
+          "damageMultiplier": 1,
+          "damageType": "support",
+          "consumesAmmo": false
         }
-      ]
+      ],
+      "productionMoneyCost": 300,
+      "productionLabourRequired": 2,
+      "productionIronRequired": 1,
+      "productionAluminiumRequired": 0,
+      "productionAP": 100
     },
     {
       "id": "heavy_tank",
@@ -846,13 +583,165 @@
       "dataGaps": [],
       "actions": [
         {
-          "id": "action_1",
-          "description": "炮击：100%爆炸伤害，80 AP",
+          "id": "action_2",
+          "description": "100%爆炸伤害，80ap，距离1-2，消耗弹药",
           "rangeConfigured": true,
           "minRange": 1,
-          "maxRange": 1
+          "maxRange": 2,
+          "actionAPCost": 80,
+          "damageMultiplier": 1,
+          "damageType": "explosion",
+          "consumesAmmo": true
         }
-      ]
+      ],
+      "productionMoneyCost": 900,
+      "productionLabourRequired": 3,
+      "productionIronRequired": 3,
+      "productionAluminiumRequired": 0,
+      "productionAP": 300
+    },
+    {
+      "id": "self_propelled_gun",
+      "unitName": "自走炮",
+      "unitCategory": "artillery",
+      "unitClass": 1,
+      "maxHP": 100,
+      "attackPower": 60,
+      "attackType": 1,
+      "bulletDefense": 10,
+      "explosionDefense": 10,
+      "movementPower": 5,
+      "movementAPLimit": 100,
+      "attackAP": 80,
+      "captureAP": 0,
+      "restAP": 0,
+      "attackRange": 4,
+      "canCapture": false,
+      "ammoCapacity": 6,
+      "fuelCapacity": 20,
+      "description": "远程火力单位。",
+      "specialAbilities": [
+        "炮击"
+      ],
+      "reconRange": 4,
+      "concealment": 0,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [],
+      "actions": [
+        {
+          "id": "action_2",
+          "description": "100%爆炸伤害，80ap，距离1-4，消耗弹药",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 4,
+          "actionAPCost": 80,
+          "damageMultiplier": 1,
+          "damageType": "explosion",
+          "consumesAmmo": true
+        }
+      ],
+      "productionMoneyCost": 400,
+      "productionLabourRequired": 2,
+      "productionIronRequired": 1,
+      "productionAluminiumRequired": 0,
+      "productionAP": 200
+    },
+    {
+      "id": "anti_air",
+      "unitName": "防空炮",
+      "unitCategory": "artillery",
+      "unitClass": 1,
+      "maxHP": 90,
+      "attackPower": 60,
+      "attackType": 0,
+      "bulletDefense": 10,
+      "explosionDefense": 20,
+      "movementPower": 5,
+      "movementAPLimit": 100,
+      "attackAP": 80,
+      "captureAP": 0,
+      "restAP": 0,
+      "attackRange": 4,
+      "canCapture": false,
+      "ammoCapacity": 10,
+      "fuelCapacity": 20,
+      "description": "专用防空单位。",
+      "specialAbilities": [
+        "防空炮击"
+      ],
+      "reconRange": 4,
+      "concealment": 0,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [],
+      "actions": [
+        {
+          "id": "action_2",
+          "description": "100%子弹伤害，80ap，距离1-4，消耗弹药",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 4,
+          "actionAPCost": 80,
+          "damageMultiplier": 1,
+          "damageType": "bullet",
+          "consumesAmmo": true
+        }
+      ],
+      "productionMoneyCost": 500,
+      "productionLabourRequired": 2,
+      "productionIronRequired": 1,
+      "productionAluminiumRequired": 0,
+      "productionAP": 200
+    },
+    {
+      "id": "rockets",
+      "unitName": "火箭炮",
+      "unitCategory": "artillery",
+      "unitClass": 1,
+      "maxHP": 90,
+      "attackPower": 80,
+      "attackType": 1,
+      "bulletDefense": 10,
+      "explosionDefense": 10,
+      "movementPower": 5,
+      "movementAPLimit": 100,
+      "attackAP": 80,
+      "captureAP": 0,
+      "restAP": 0,
+      "attackRange": 6,
+      "canCapture": false,
+      "ammoCapacity": 20,
+      "fuelCapacity": 20,
+      "description": "无法攻击近距离目标；可消耗更多 AP 同时攻击多个单位。",
+      "specialAbilities": [
+        "火箭齐射"
+      ],
+      "reconRange": 4,
+      "concealment": 0,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "多目标攻击的目标上限与额外 AP 未指定"
+      ],
+      "actions": [
+        {
+          "id": "action_2",
+          "description": "100%爆炸伤害，80ap，距离3-6，消耗弹药",
+          "rangeConfigured": true,
+          "minRange": 3,
+          "maxRange": 6,
+          "actionAPCost": 80,
+          "damageMultiplier": 1,
+          "damageType": "explosion",
+          "consumesAmmo": true
+        }
+      ],
+      "productionMoneyCost": 600,
+      "productionLabourRequired": 2,
+      "productionIronRequired": 1,
+      "productionAluminiumRequired": 0,
+      "productionAP": 300
     },
     {
       "id": "fortress",
@@ -887,12 +776,190 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "驻守炮击：100%爆炸伤害，80 AP；机动形态不能攻击",
+          "description": "切换驻守/机动状态，100ap",
+          "rangeConfigured": true,
+          "minRange": 0,
+          "maxRange": 0,
+          "actionAPCost": 100,
+          "damageMultiplier": 1,
+          "damageType": "stance",
+          "consumesAmmo": false
+        },
+        {
+          "id": "action_2",
+          "description": "100%爆炸伤害，80ap，距离1-8，消耗弹药，驻守状态可用",
           "rangeConfigured": true,
           "minRange": 1,
-          "maxRange": 1
+          "maxRange": 8,
+          "actionAPCost": 80,
+          "damageMultiplier": 1,
+          "damageType": "explosion",
+          "consumesAmmo": true
         }
-      ]
+      ],
+      "productionMoneyCost": 1200,
+      "productionLabourRequired": 5,
+      "productionIronRequired": 5,
+      "productionAluminiumRequired": 0,
+      "productionAP": 500
+    },
+    {
+      "id": "fighter",
+      "unitName": "战斗机",
+      "unitCategory": "air",
+      "unitClass": 2,
+      "maxHP": 100,
+      "attackPower": 40,
+      "attackType": 0,
+      "bulletDefense": 20,
+      "explosionDefense": 20,
+      "movementPower": 12,
+      "movementAPLimit": 100,
+      "attackAP": 50,
+      "captureAP": 0,
+      "restAP": 0,
+      "attackRange": 1,
+      "canCapture": false,
+      "ammoCapacity": 6,
+      "fuelCapacity": 10,
+      "description": "高速空战单位。",
+      "specialAbilities": [
+        "机枪",
+        "空袭"
+      ],
+      "reconRange": 5,
+      "concealment": 0,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "不同攻击动作的实际目标类别限制与伤害公式待落地"
+      ],
+      "actions": [
+        {
+          "id": "action_1",
+          "description": "50%子弹伤害，50ap，距离1-1",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1,
+          "actionAPCost": 50,
+          "damageMultiplier": 0.5,
+          "damageType": "bullet",
+          "consumesAmmo": false
+        },
+        {
+          "id": "action_2",
+          "description": "100%爆炸伤害，80ap，距离1-3，消耗弹药",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 3,
+          "actionAPCost": 80,
+          "damageMultiplier": 1,
+          "damageType": "explosion",
+          "consumesAmmo": true
+        }
+      ],
+      "productionMoneyCost": 1000,
+      "productionLabourRequired": 3,
+      "productionIronRequired": 3,
+      "productionAluminiumRequired": 3,
+      "productionAP": 300
+    },
+    {
+      "id": "bomber",
+      "unitName": "轰炸机",
+      "unitCategory": "air",
+      "unitClass": 2,
+      "maxHP": 90,
+      "attackPower": 100,
+      "attackType": 1,
+      "bulletDefense": 20,
+      "explosionDefense": 20,
+      "movementPower": 10,
+      "movementAPLimit": 100,
+      "attackAP": 80,
+      "captureAP": 0,
+      "restAP": 0,
+      "attackRange": 1,
+      "canCapture": false,
+      "ammoCapacity": 4,
+      "fuelCapacity": 10,
+      "description": "高伤害轰炸单位。",
+      "specialAbilities": [
+        "轰炸"
+      ],
+      "reconRange": 5,
+      "concealment": 0,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [],
+      "actions": [
+        {
+          "id": "action_2",
+          "description": "100%爆炸伤害，80ap，距离1-1，消耗弹药",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1,
+          "actionAPCost": 80,
+          "damageMultiplier": 1,
+          "damageType": "explosion",
+          "consumesAmmo": true
+        }
+      ],
+      "productionMoneyCost": 1200,
+      "productionLabourRequired": 3,
+      "productionIronRequired": 4,
+      "productionAluminiumRequired": 3,
+      "productionAP": 300
+    },
+    {
+      "id": "transport_aircraft",
+      "unitName": "运输机",
+      "unitCategory": "air",
+      "unitClass": 2,
+      "maxHP": 110,
+      "attackPower": 30,
+      "attackType": 0,
+      "bulletDefense": 20,
+      "explosionDefense": 20,
+      "movementPower": 10,
+      "movementAPLimit": 100,
+      "attackAP": 50,
+      "captureAP": 0,
+      "restAP": 0,
+      "attackRange": 1,
+      "canCapture": false,
+      "ammoCapacity": 20,
+      "fuelCapacity": 20,
+      "description": "可运输资源，为相邻地面友军补充燃料与弹药；可免费攻击地面目标。",
+      "specialAbilities": [
+        "机枪",
+        "装货/卸货"
+      ],
+      "reconRange": 5,
+      "concealment": 0,
+      "canDetectSpy": false,
+      "resourceCapacity": 2,
+      "dataGaps": [
+        "载量数值已录入，但资源类型、堆叠和装卸规则待定义"
+      ],
+      "actions": [
+        {
+          "id": "action_1",
+          "description": "100%子弹伤害，50ap，距离1-1",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1,
+          "actionAPCost": 50,
+          "damageMultiplier": 1,
+          "damageType": "bullet",
+          "consumesAmmo": false
+        }
+      ],
+      "productionMoneyCost": 600,
+      "productionLabourRequired": 2,
+      "productionIronRequired": 1,
+      "productionAluminiumRequired": 1,
+      "productionAP": 150
     },
     {
       "id": "refuel_aircraft",
@@ -917,20 +984,29 @@
       "specialAbilities": [
         "空中加油"
       ],
-      "reconRange": 6,
+      "reconRange": 5,
       "concealment": 0,
       "canDetectSpy": false,
       "resourceCapacity": 0,
       "dataGaps": [],
       "actions": [
         {
-          "id": "action_1",
-          "description": "空中加油：指定单位 +5 燃料，80 AP",
+          "id": "action_3",
+          "description": "补充指定单位5点燃料，80ap",
           "rangeConfigured": true,
           "minRange": 1,
-          "maxRange": 1
+          "maxRange": 1,
+          "actionAPCost": 80,
+          "damageMultiplier": 1,
+          "damageType": "support",
+          "consumesAmmo": false
         }
-      ]
+      ],
+      "productionMoneyCost": 600,
+      "productionLabourRequired": 2,
+      "productionIronRequired": 1,
+      "productionAluminiumRequired": 1,
+      "productionAP": 200
     },
     {
       "id": "torpedo_plane",
@@ -955,7 +1031,7 @@
       "specialAbilities": [
         "鱼雷攻击"
       ],
-      "reconRange": 6,
+      "reconRange": 5,
       "concealment": 0,
       "canDetectSpy": false,
       "resourceCapacity": 0,
@@ -964,13 +1040,180 @@
       ],
       "actions": [
         {
-          "id": "action_1",
-          "description": "鱼雷攻击：100%爆炸伤害，80 AP；仅攻击海军单位",
+          "id": "action_2",
+          "description": "100%爆炸伤害，80ap，距离1-1，消耗弹药",
           "rangeConfigured": true,
           "minRange": 1,
-          "maxRange": 1
+          "maxRange": 1,
+          "actionAPCost": 80,
+          "damageMultiplier": 1,
+          "damageType": "explosion",
+          "consumesAmmo": true
         }
-      ]
+      ],
+      "productionMoneyCost": 800,
+      "productionLabourRequired": 3,
+      "productionIronRequired": 3,
+      "productionAluminiumRequired": 3,
+      "productionAP": 300
+    },
+    {
+      "id": "sub",
+      "unitName": "潜水艇",
+      "unitCategory": "naval",
+      "unitClass": 3,
+      "maxHP": 80,
+      "attackPower": 50,
+      "attackType": 1,
+      "bulletDefense": 20,
+      "explosionDefense": 20,
+      "movementPower": 4,
+      "movementAPLimit": 100,
+      "attackAP": 80,
+      "captureAP": 0,
+      "restAP": 0,
+      "attackRange": 2,
+      "canCapture": false,
+      "ammoCapacity": 4,
+      "fuelCapacity": 20,
+      "description": "潜航单位；只能被驱逐舰、巡洋舰和鱼雷机的鱼雷攻击命中。",
+      "specialAbilities": [
+        "鱼雷攻击"
+      ],
+      "reconRange": 2,
+      "concealment": 6,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [
+        "潜航状态如何切换及具体反潜命中规则待定义"
+      ],
+      "actions": [
+        {
+          "id": "action_2",
+          "description": "100%爆炸伤害，80ap，距离1-1，消耗弹药",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1,
+          "actionAPCost": 80,
+          "damageMultiplier": 1,
+          "damageType": "explosion",
+          "consumesAmmo": true
+        }
+      ],
+      "productionMoneyCost": 600,
+      "productionLabourRequired": 3,
+      "productionIronRequired": 1,
+      "productionAluminiumRequired": 0,
+      "productionAP": 300
+    },
+    {
+      "id": "transport_ship",
+      "unitName": "运输舰",
+      "unitCategory": "naval",
+      "unitClass": 3,
+      "maxHP": 120,
+      "attackPower": 20,
+      "attackType": 0,
+      "bulletDefense": 10,
+      "explosionDefense": 10,
+      "movementPower": 6,
+      "movementAPLimit": 100,
+      "attackAP": 50,
+      "captureAP": 0,
+      "restAP": 0,
+      "attackRange": 1,
+      "canCapture": false,
+      "ammoCapacity": 20,
+      "fuelCapacity": 20,
+      "description": "可运输资源，为相邻海面友军补充燃料与弹药；可免费攻击地面目标。",
+      "specialAbilities": [
+        "机炮",
+        "补给",
+        "装货/卸货"
+      ],
+      "reconRange": 3,
+      "concealment": 0,
+      "canDetectSpy": false,
+      "resourceCapacity": 5,
+      "dataGaps": [
+        "载量数值已录入，但资源类型、堆叠和装卸规则待定义"
+      ],
+      "actions": [
+        {
+          "id": "action_1",
+          "description": "100%子弹伤害，50ap，距离1-1",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1,
+          "actionAPCost": 50,
+          "damageMultiplier": 1,
+          "damageType": "bullet",
+          "consumesAmmo": false
+        },
+        {
+          "id": "action_3",
+          "description": "补充指定单位5点燃料，80ap；补充指定单位2点弹药，80ap",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 1,
+          "actionAPCost": 80,
+          "damageMultiplier": 1,
+          "damageType": "support",
+          "consumesAmmo": false
+        }
+      ],
+      "productionMoneyCost": 500,
+      "productionLabourRequired": 2,
+      "productionIronRequired": 1,
+      "productionAluminiumRequired": 0,
+      "productionAP": 150
+    },
+    {
+      "id": "battleship",
+      "unitName": "战列舰",
+      "unitCategory": "naval",
+      "unitClass": 3,
+      "maxHP": 240,
+      "attackPower": 100,
+      "attackType": 1,
+      "bulletDefense": 80,
+      "explosionDefense": 60,
+      "movementPower": 5,
+      "movementAPLimit": 100,
+      "attackAP": 80,
+      "captureAP": 0,
+      "restAP": 0,
+      "attackRange": 8,
+      "canCapture": false,
+      "ammoCapacity": 20,
+      "fuelCapacity": 40,
+      "description": "续航、防御与远程炮击能力强。",
+      "specialAbilities": [
+        "主炮"
+      ],
+      "reconRange": 5,
+      "concealment": 0,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "dataGaps": [],
+      "actions": [
+        {
+          "id": "action_2",
+          "description": "100%爆炸伤害，80ap，距离1-6，消耗弹药",
+          "rangeConfigured": true,
+          "minRange": 1,
+          "maxRange": 6,
+          "actionAPCost": 80,
+          "damageMultiplier": 1,
+          "damageType": "explosion",
+          "consumesAmmo": true
+        }
+      ],
+      "productionMoneyCost": 1200,
+      "productionLabourRequired": 4,
+      "productionIronRequired": 5,
+      "productionAluminiumRequired": 0,
+      "productionAP": 500
     },
     {
       "id": "aircraft_carrier",
@@ -996,7 +1239,7 @@
         "舰载机停靠与补给（容量/费用待定）",
         "补充指定单位 5 点燃料"
       ],
-      "reconRange": 6,
+      "reconRange": 1,
       "concealment": 0,
       "canDetectSpy": false,
       "resourceCapacity": 0,
@@ -1005,20 +1248,22 @@
       ],
       "actions": [
         {
-          "id": "action_1",
-          "description": "舰载机停靠与补给（容量/费用待定）",
+          "id": "action_3",
+          "description": "补充指定单位5点燃料，80ap",
           "rangeConfigured": true,
           "minRange": 1,
-          "maxRange": 1
-        },
-        {
-          "id": "action_2",
-          "description": "补充指定单位 5 点燃料，80 AP",
-          "rangeConfigured": true,
-          "minRange": 1,
-          "maxRange": 1
+          "maxRange": 1,
+          "actionAPCost": 80,
+          "damageMultiplier": 1,
+          "damageType": "support",
+          "consumesAmmo": false
         }
-      ]
+      ],
+      "productionMoneyCost": 1500,
+      "productionLabourRequired": 5,
+      "productionIronRequired": 4,
+      "productionAluminiumRequired": 4,
+      "productionAP": 600
     },
     {
       "id": "destroyer",
@@ -1033,10 +1278,10 @@
       "movementPower": 8,
       "movementAPLimit": 100,
       "attackAP": 50,
-      "captureAP": 80,
+      "captureAP": 0,
       "restAP": 0,
       "attackRange": 3,
-      "canCapture": true,
+      "canCapture": false,
       "ammoCapacity": 6,
       "fuelCapacity": 20,
       "description": "鱼雷伤害高；鱼雷攻击消耗弹药，炮击不消耗弹药。",
@@ -1044,7 +1289,7 @@
         "舰炮",
         "鱼雷"
       ],
-      "reconRange": 4,
+      "reconRange": 6,
       "concealment": 0,
       "canDetectSpy": false,
       "resourceCapacity": 0,
@@ -1054,19 +1299,32 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "舰炮：50%子弹伤害，50 AP",
+          "description": "50%子弹伤害，50ap，距离1-2",
           "rangeConfigured": true,
           "minRange": 1,
-          "maxRange": 1
+          "maxRange": 2,
+          "actionAPCost": 50,
+          "damageMultiplier": 0.5,
+          "damageType": "bullet",
+          "consumesAmmo": false
         },
         {
           "id": "action_2",
-          "description": "鱼雷：100%爆炸伤害，80 AP",
+          "description": "100%爆炸伤害，80ap，距离1-3，消耗弹药",
           "rangeConfigured": true,
           "minRange": 1,
-          "maxRange": 1
+          "maxRange": 3,
+          "actionAPCost": 80,
+          "damageMultiplier": 1,
+          "damageType": "explosion",
+          "consumesAmmo": true
         }
-      ]
+      ],
+      "productionMoneyCost": 600,
+      "productionLabourRequired": 3,
+      "productionIronRequired": 2,
+      "productionAluminiumRequired": 0,
+      "productionAP": 300
     },
     {
       "id": "cruiser",
@@ -1075,16 +1333,16 @@
       "unitClass": 3,
       "maxHP": 160,
       "attackPower": 60,
-      "attackType": 0,
+      "attackType": 1,
       "bulletDefense": 60,
       "explosionDefense": 40,
       "movementPower": 6,
       "movementAPLimit": 100,
       "attackAP": 50,
-      "captureAP": 80,
+      "captureAP": 0,
       "restAP": 0,
       "attackRange": 6,
-      "canCapture": true,
+      "canCapture": false,
       "ammoCapacity": 10,
       "fuelCapacity": 30,
       "description": "兼有炮击、鱼雷与防空能力，但各类专精不如专用单位；鱼雷消耗弹药，炮击与防空不消耗弹药。",
@@ -1092,7 +1350,7 @@
         "舰炮/防空",
         "鱼雷/重炮"
       ],
-      "reconRange": 5,
+      "reconRange": 6,
       "concealment": 0,
       "canDetectSpy": false,
       "resourceCapacity": 0,
@@ -1102,19 +1360,32 @@
       "actions": [
         {
           "id": "action_1",
-          "description": "舰炮/防空：50%子弹伤害，50 AP",
+          "description": "50%爆炸伤害，50ap，距离1-4",
           "rangeConfigured": true,
           "minRange": 1,
-          "maxRange": 1
+          "maxRange": 4,
+          "actionAPCost": 50,
+          "damageMultiplier": 0.5,
+          "damageType": "explosion",
+          "consumesAmmo": false
         },
         {
           "id": "action_2",
-          "description": "鱼雷/重炮：100%爆炸伤害，80 AP",
+          "description": "100%爆炸伤害，80ap，距离1-3，消耗弹药",
           "rangeConfigured": true,
           "minRange": 1,
-          "maxRange": 1
+          "maxRange": 3,
+          "actionAPCost": 80,
+          "damageMultiplier": 1,
+          "damageType": "explosion",
+          "consumesAmmo": true
         }
-      ]
+      ],
+      "productionMoneyCost": 800,
+      "productionLabourRequired": 4,
+      "productionIronRequired": 3,
+      "productionAluminiumRequired": 0,
+      "productionAP": 400
     }
   ],
   "prototypeVersion": "0.2.0"
