@@ -116,6 +116,9 @@ public class HexBuildingEconomy : MonoBehaviour
     private readonly Dictionary<Color, Material> generatedMaterials = new Dictionary<Color, Material>();
     private bool resultWasReported;
     private BuildingPlacement[] levelOneBuildings;
+    private int levelOneStartingMoney;
+    private int levelOneStartingLabour;
+    private bool levelOneConfigurationCaptured;
 
     public int PlayerTeamId => 0;
     public event Action<int, int, HexBuildingType> HeadquartersCaptured;
@@ -132,8 +135,15 @@ public class HexBuildingEconomy : MonoBehaviour
 
         battlefield = map;
         unitController = units;
-        if (levelOneBuildings == null && initialBuildings != null)
-            levelOneBuildings = (BuildingPlacement[])initialBuildings.Clone();
+        if (!levelOneConfigurationCaptured)
+        {
+            levelOneBuildings = initialBuildings != null
+                ? (BuildingPlacement[])initialBuildings.Clone()
+                : new BuildingPlacement[0];
+            levelOneStartingMoney = startingMoney;
+            levelOneStartingLabour = startingLabour;
+            levelOneConfigurationCaptured = true;
+        }
         EnsureProductionProfilesFromUnitDatabase();
         if (battlefield == null)
         {
@@ -222,16 +232,23 @@ public class HexBuildingEconomy : MonoBehaviour
 
     public void ConfigureLevel(int levelIndex)
     {
-        if (levelOneBuildings == null && initialBuildings != null)
-            levelOneBuildings = (BuildingPlacement[])initialBuildings.Clone();
+        if (!levelOneConfigurationCaptured)
+        {
+            levelOneBuildings = initialBuildings != null
+                ? (BuildingPlacement[])initialBuildings.Clone()
+                : new BuildingPlacement[0];
+            levelOneStartingMoney = startingMoney;
+            levelOneStartingLabour = startingLabour;
+            levelOneConfigurationCaptured = true;
+        }
 
         if (levelIndex <= 0)
         {
             initialBuildings = levelOneBuildings != null
                 ? (BuildingPlacement[])levelOneBuildings.Clone()
                 : new BuildingPlacement[0];
-            startingMoney = 500;
-            startingLabour = 2;
+            startingMoney = levelOneStartingMoney;
+            startingLabour = levelOneStartingLabour;
             return;
         }
 
@@ -751,6 +768,11 @@ public class HexBuildingEconomy : MonoBehaviour
         GUILayout.Label($"{ShortName(building.type)}　归属：{TeamName(building.ownerTeam)}");
         int income = GetIncomePerAP(building.type);
         if (income > 0) GUILayout.Label($"收入：每 AP +{income} 金钱");
+        if (driver != null && building.ownerTeam == 0 && IsActionQueueBuilding(building.type))
+        {
+            if (GUILayout.Button("选择建筑行动节点"))
+                driver.SelectBuildingAt(q, r);
+        }
         if (building.type == HexBuildingType.Headquarters)
             GUILayout.Label("驻扎恢复：每 20 AP +10 HP、+1 弹药、+2 燃料；占领时 +2 劳动力");
         else if (building.type == HexBuildingType.LargeCity || building.type == HexBuildingType.SmallCity)
@@ -790,40 +812,17 @@ public class HexBuildingEconomy : MonoBehaviour
         }
 
         GUILayout.Space(4);
-        GUILayout.Label("生产（占用金钱并临时预留劳动力/矿产资源）");
-        if (building.activeOrder != null)
+        if (building.activeOrder != null && building.activeOrder.profile != null)
         {
             ProductionOrder order = building.activeOrder;
             bool shortage = HasResourceShortage(order.team);
             float pct = Mathf.Clamp01(order.progress / Mathf.Max(1, order.profile.productionAP));
-            GUILayout.Label($"{order.profile.displayName}：{pct * 100f:0}%　{(shortage ? "资源不足，速度 -50%" : "正常速度")}");
-            GUILayout.Label($"进度：{order.progress:0.0}/{order.profile.productionAP} AP");
+            GUILayout.Label($"当前生产：{order.profile.displayName}　{pct * 100f:0}%");
+            GUILayout.Label($"进度：{order.progress:0.0}/{order.profile.productionAP} AP　{(shortage ? "资源不足，速度 -50%" : "正常速度")}");
         }
         else
         {
-            bool any = false;
-            if (productionProfiles != null)
-            {
-                foreach (UnitProductionProfile profile in productionProfiles)
-                {
-                    if (profile == null || !ProfileAllows(profile, building.type)) continue;
-                    any = true;
-                    bool canStart = CanStartProduction(building, viewingTeam, profile, out string reason, driver);
-                    GUI.enabled = canStart;
-                    string label = $"{profile.displayName}（{profile.moneyCost} 金钱 / {profile.productionAP} AP）";
-                    if (GUILayout.Button(label))
-                    {
-                        if (StartProduction(building, viewingTeam, profile, driver, out string result))
-                            reason = result;
-                        else
-                            reason = result;
-                    }
-                    GUI.enabled = true;
-                    if (!string.IsNullOrEmpty(reason)) GUILayout.Label(reason);
-                }
-            }
-            if (!any)
-                GUILayout.Label("尚未配置该工厂的单位生产参数；请在 Inspector 的 Production Profiles 中添加。");
+            GUILayout.Label("生产命令需等待该工厂的行动节点就绪后，在建筑行动菜单中选择单位。");
         }
     }
 
