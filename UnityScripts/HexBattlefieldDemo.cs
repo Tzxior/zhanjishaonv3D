@@ -19,8 +19,8 @@ public class HexBattlefieldDemo : MonoBehaviour
     [Header("Camera Controls")]
     [Min(0.1f)] public float cameraPanSensitivity = 1f;
     [Min(0.01f)] public float cameraRotationSensitivity = 0.25f;
-    [Range(10f, 60f)] public float minimumCameraPolarAngle = 20f;
-    [Range(45f, 89f)] public float maximumCameraPolarAngle = 80f;
+    [Range(30f, 60f)] public float minimumCameraPolarAngle = 30f;
+    [Range(30f, 60f)] public float maximumCameraPolarAngle = 60f;
 
     [Header("Movement Highlight")]
     public Color reachableTileColor = new Color(0.18f, 0.78f, 0.88f);
@@ -41,6 +41,7 @@ public class HexBattlefieldDemo : MonoBehaviour
     {
         public int q, r;
         public string terrain;
+        public Transform root;
         public Material material;
         public Color baseColor;
         public bool isReachable;
@@ -97,11 +98,12 @@ public class HexBattlefieldDemo : MonoBehaviour
             tile.AddComponent<MeshRenderer>().sharedMaterial = material;
             MeshCollider collider = tile.AddComponent<MeshCollider>();
             collider.sharedMesh = hexMesh;
-            TileInfo info = new TileInfo { q = q, r = r, terrain = terrain, material = material, baseColor = color };
+            TileInfo info = new TileInfo { q = q, r = r, terrain = terrain, root = tile.transform, material = material, baseColor = color };
             tilesByCollider[collider] = info;
             tilesByCoordinates[new Vector2Int(q, r)] = info;
             CreateTerrainVisuals(tile.transform, terrain, shader, q, r);
         }
+        BuildRoadNetworkVisuals(shader);
         Debug.Log($"Hex battlefield ready: {columns} x {rows} = {columns * rows} hexes.");
     }
 
@@ -207,25 +209,15 @@ public class HexBattlefieldDemo : MonoBehaviour
                 break;
 
             case "Road":
-                AddTerrainPart(tile, PrimitiveType.Cube, "RoadSurface",
-                    new Vector3(0f, top + 0.018f, 0f), new Vector3(1.30f, 0.035f, 0.34f) * size,
-                    new Color(0.28f, 0.28f, 0.26f), shader, new Vector3(0f, 30f, 0f));
-                AddTerrainPart(tile, PrimitiveType.Cube, "RoadCenterMark",
-                    new Vector3(0f, top + 0.038f, 0f), new Vector3(0.72f, 0.008f, 0.025f) * size,
-                    new Color(0.79f, 0.73f, 0.54f), shader, new Vector3(0f, 30f, 0f));
-                break;
-
             case "MountainRoad":
-                AddTerrainPart(tile, PrimitiveType.Cube, "MountainRoadSurface",
-                    new Vector3(0f, top + 0.022f, 0f), new Vector3(1.26f, 0.045f, 0.36f) * size,
-                    new Color(0.35f, 0.29f, 0.23f), shader, new Vector3(0f, 30f, 0f));
-                AddTerrainPart(tile, PrimitiveType.Cube, "MountainRoadStripe",
-                    new Vector3(0f, top + 0.048f, 0f), new Vector3(0.72f, 0.008f, 0.025f) * size,
-                    new Color(0.70f, 0.61f, 0.45f), shader, new Vector3(0f, 30f, 0f));
-                for (int i = 0; i < 2; i++)
-                    AddTerrainPart(tile, PrimitiveType.Sphere, "RoadsideRock",
-                        new Vector3((i == 0 ? -0.34f : 0.34f) * size, top + 0.06f * size, (i == 0 ? 0.25f : -0.25f) * size),
-                        new Vector3(0.17f, 0.12f, 0.15f) * size, stone, shader);
+                // Road arms and junctions are generated after every hex has been created.
+                if (terrain == "MountainRoad")
+                {
+                    for (int i = 0; i < 2; i++)
+                        AddTerrainPart(tile, PrimitiveType.Sphere, "RoadsideRock",
+                            new Vector3((i == 0 ? -0.34f : 0.34f) * size, top + 0.06f * size, (i == 0 ? 0.25f : -0.25f) * size),
+                            new Vector3(0.14f, 0.10f, 0.12f) * size, stone, shader);
+                }
                 break;
 
             case "Dryland":
@@ -268,6 +260,66 @@ public class HexBattlefieldDemo : MonoBehaviour
         icon.color = new Color(0.08f, 0.10f, 0.09f, 0.92f);
     }
 
+    private bool IsRoadConnector(string terrain)
+    {
+        return terrain == "Road" || terrain == "MountainRoad" || terrain == "City";
+    }
+
+    private void BuildRoadNetworkVisuals(Shader shader)
+    {
+        Vector2Int[] directions =
+        {
+            new Vector2Int(1, 0), new Vector2Int(-1, 0),
+            new Vector2Int(0, 1), new Vector2Int(0, -1),
+            new Vector2Int(1, -1), new Vector2Int(-1, 1)
+        };
+        Color roadSurface = new Color(0.25f, 0.25f, 0.23f);
+        Color roadStripe = new Color(0.78f, 0.72f, 0.54f);
+        Color mountainSurface = new Color(0.33f, 0.28f, 0.23f);
+        Color mountainStripe = new Color(0.68f, 0.58f, 0.43f);
+
+        foreach (TileInfo tile in tilesByCoordinates.Values)
+        {
+            if (tile.root == null || !IsRoadConnector(tile.terrain)) continue;
+            int links = 0;
+            foreach (Vector2Int d in directions)
+            {
+                Vector2Int neighbourCoordinate = new Vector2Int(tile.q + d.x, tile.r + d.y);
+                if (!tilesByCoordinates.TryGetValue(neighbourCoordinate, out TileInfo adjacent) ||
+                    !IsRoadConnector(adjacent.terrain)) continue;
+
+                links++;
+                float dx = 1.5f * hexSize * d.x;
+                float dz = Mathf.Sqrt(3f) * hexSize * (d.y + d.x * 0.5f);
+                Vector2 direction = new Vector2(dx, dz).normalized;
+                float edgeDistance = Mathf.Sqrt(3f) * hexSize * 0.5f;
+                float length = edgeDistance + hexSize * 0.07f;
+                float width = hexSize * 0.30f;
+                float y = tileThickness * 0.5f + 0.026f;
+                float yaw = -Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
+                bool isMountainRoute = tile.terrain == "MountainRoad" || adjacent.terrain == "MountainRoad";
+                Color surface = isMountainRoute ? mountainSurface : roadSurface;
+                Color stripe = isMountainRoute ? mountainStripe : roadStripe;
+
+                AddTerrainPart(tile.root, PrimitiveType.Cube, "RoadConnector",
+                    new Vector3(direction.x * length * 0.5f, y, direction.y * length * 0.5f),
+                    new Vector3(length, hexSize * 0.035f, width), surface, shader,
+                    new Vector3(0f, yaw, 0f));
+                AddTerrainPart(tile.root, PrimitiveType.Cube, "RoadCenterStripe",
+                    new Vector3(direction.x * length * 0.46f, y + hexSize * 0.018f, direction.y * length * 0.46f),
+                    new Vector3(length * 0.72f, hexSize * 0.008f, hexSize * 0.025f),
+                    stripe, shader, new Vector3(0f, yaw, 0f));
+            }
+
+            // All connected directions are filled automatically, producing T, 4-way and 6-way junctions.
+            if (links >= 3)
+                AddTerrainPart(tile.root, PrimitiveType.Cylinder, "RoadJunction",
+                    new Vector3(0f, tileThickness * 0.5f + 0.030f, 0f),
+                    new Vector3(hexSize * 0.31f, hexSize * 0.018f, hexSize * 0.31f),
+                    tile.terrain == "MountainRoad" ? mountainSurface : roadSurface, shader);
+        }
+    }
+
     public void SetFactionColors(Color playerColor, Color opponentColor)
     {
         playerFactionColor = playerColor;
@@ -288,8 +340,9 @@ public class HexBattlefieldDemo : MonoBehaviour
         int cq = columns / 2, cr = rows / 2;
         if (q == cq && r == cr) { terrain = "City"; color = neutralCityColor; return; }
 
-        // Visible road corridors let the prototype demonstrate terrain-dependent AP costs.
-        if (r == cr || q == cq) { terrain = "Road"; color = new Color(0.46f, 0.43f, 0.34f); return; }
+        // Three road axes share one center, so their connected tiles naturally form 3/4/6-way junctions.
+        if (r == cr || q == cq || q + r == cq + cr)
+        { terrain = "Road"; color = new Color(0.46f, 0.43f, 0.34f); return; }
         if (q == cq + 1 && r >= Mathf.Max(0, cr - 2) && r <= Mathf.Min(rows - 1, cr + 2))
         { terrain = "MountainRoad"; color = new Color(0.56f, 0.40f, 0.29f); return; }
 
