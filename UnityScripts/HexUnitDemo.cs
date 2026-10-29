@@ -326,7 +326,10 @@ public class HexUnitDemo : MonoBehaviour
                 continue;
             Dictionary<string, Sprite[]> animation = team == 0 ? blueAnimations : redAnimations;
             SpawnStartingUnits(new[] { coordinate }, null, new[] { unitId }, team, animation);
-            return FindUnitAt(coordinate.x, coordinate.y) != null;
+            UnitInfo produced = FindUnitAt(coordinate.x, coordinate.y);
+            if (produced == null) return false;
+            ReserveNextActionNode(produced, battleTimeAP + 1f);
+            return true;
         }
         return false;
     }
