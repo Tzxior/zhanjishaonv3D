@@ -644,7 +644,7 @@ public class HexUnitDemo : MonoBehaviour
     private Rect GetTileInfoPanelRect()
     {
         float width = Mathf.Min(370f, Screen.width - 24f);
-        float height = Mathf.Min(230f, Screen.height * 0.42f);
+        float height = Mathf.Min(340f, Screen.height * 0.62f);
         return new Rect(Screen.width - width - 12f, Screen.height - height - 12f, width, height);
     }
 
@@ -931,7 +931,7 @@ public class HexUnitDemo : MonoBehaviour
             occupied = false;
             foreach (UnitInfo other in units)
             {
-                if (other == null || other == unit || other.carrier != null) continue;
+                if (other == null || other == unit || other.carrier != null || other.isSkinChest) continue;
                 if (Mathf.Abs(other.nextReadyTime - candidate) < 0.001f)
                 {
                     occupied = true;
@@ -1056,9 +1056,11 @@ public class HexUnitDemo : MonoBehaviour
         statusMessage=$"{selectedUnit.unitName}使用{selectedAttackName}造成 {damage} 伤害；消耗 {actionCost} AP。";
         if (target.hp <= 0)
         {
+            if (target.isSkinChest) SkinChestDefeated?.Invoke(target.rewardSkinId);
             units.Remove(target);
             if (target.visual != null) Destroy(target.visual.gameObject);
-            statusMessage += " 敌方单位被击破。";
+            if (!target.isSkinChest) statusMessage += " 敌方单位被击破。";
+            CheckEliminationResult();
         }
 
         FinishPlayerActivation(actionCost);
@@ -1072,9 +1074,16 @@ public class HexUnitDemo : MonoBehaviour
             statusMessage = "该单位不具备占领能力。";
             return;
         }
+        int cost = selectedUnit.captureAP;
+        if (buildingEconomy != null && buildingEconomy.TryCaptureBuildingAt(selectedUnit.q, selectedUnit.r, selectedUnit.team, this, out string captureMessage))
+        {
+            statusMessage = captureMessage + $" 行动消耗 {cost} AP。";
+            FinishPlayerActivation(cost);
+            return;
+        }
         if (!battlefield.IsCity(selectedUnit.q, selectedUnit.r))
         {
-            statusMessage = "当前地块不是城市，无法执行占领。";
+            statusMessage = "当前地块不是可占领建筑。";
             return;
         }
         if (battlefield.GetCityOwner(selectedUnit.q, selectedUnit.r) == 0)
@@ -1082,9 +1091,7 @@ public class HexUnitDemo : MonoBehaviour
             statusMessage = "这座城市已经属于我方。";
             return;
         }
-
         battlefield.CaptureCity(selectedUnit.q, selectedUnit.r, 0);
-        int cost=selectedUnit.captureAP;
         statusMessage = $"占领完成：城市归属已变为我方，行动消耗 {cost} AP。";
         FinishPlayerActivation(cost);
     }
@@ -1119,7 +1126,7 @@ public class HexUnitDemo : MonoBehaviour
         ClearHighlights();
 
         statusMessage = $"本次行动结束：移动与行动合计消耗 {totalCost} AP；下次可行动时间为 AP {nextActionNode:0}。";
-        if (!HasReadyBlueUnit())
+        if (!gameplayPaused && !battleEnded && !HasReadyBlueUnit())
             StartCoroutine(RunSimulationUntilPlayerCanAct());
     }
 
@@ -1133,15 +1140,16 @@ public class HexUnitDemo : MonoBehaviour
         statusMessage = "敌方正在计算行动顺序……";
 
         int safety = 0;
-        while (!HasReadyBlueUnit() && safety++ < 300)
+        while (!gameplayPaused && !battleEnded && !HasReadyBlueUnit() && safety++ < 300)
         {
             UnitInfo readyEnemy = null;
             foreach (UnitInfo unit in units)
-                if (unit.team == 1 && unit.carrier == null && IsUnitReady(unit)) { readyEnemy = unit; break; }
+                if (unit.team == 1 && !unit.isSkinChest && unit.carrier == null && IsUnitReady(unit)) { readyEnemy = unit; break; }
 
             if (readyEnemy != null)
             {
                 yield return StartCoroutine(PerformEnemyActivation(readyEnemy));
+                if (gameplayPaused || battleEnded) break;
                 continue;
             }
 
@@ -1157,15 +1165,21 @@ public class HexUnitDemo : MonoBehaviour
             }
 
             // Discrete event jump: never based on Time.deltaTime.
+            float previousAP = battleTimeAP;
             battleTimeAP = nextTime;
+            if (buildingEconomy != null) buildingEconomy.AdvanceAP(previousAP, battleTimeAP, this);
+            if (gameplayPaused || battleEnded) break;
         }
 
         if (safety >= 300) Debug.LogWarning("Simulation safety limit reached.");
         simulationRunning = false;
-        selectedUnit = null;
-        statusMessage = HasReadyBlueUnit()
-            ? "战场时间已推进；现在有我方单位可以行动。"
-            : statusMessage;
+        if (!gameplayPaused && !battleEnded)
+        {
+            selectedUnit = null;
+            statusMessage = HasReadyBlueUnit()
+                ? "战场时间已推进；现在有我方单位可以行动。"
+                : statusMessage;
+        }
     }
 
     private IEnumerator PerformEnemyActivation(UnitInfo enemy)
@@ -1228,17 +1242,27 @@ public class HexUnitDemo : MonoBehaviour
                 units.Remove(target);
                 if (target.visual != null) Destroy(target.visual.gameObject);
                 statusMessage += " 我方单位被击破。";
+                CheckEliminationResult();
+                if (battleEnded) yield break;
             }
             if (enemyActionDisplayDelay > 0f)
                 yield return new WaitForSecondsRealtime(enemyActionDisplayDelay);
         }
-        else if (battlefield.IsCity(enemy.q, enemy.r) && battlefield.GetCityOwner(enemy.q, enemy.r) != 1 && enemy.canCapture)
+        else if (enemy.canCapture && buildingEconomy != null && buildingEconomy.CanCaptureAt(enemy.q, enemy.r, enemy.team))
         {
-            battlefield.CaptureCity(enemy.q, enemy.r, 1);
-            actionCost=enemy.captureAP;
+            buildingEconomy.TryCaptureBuildingAt(enemy.q, enemy.r, enemy.team, this, out string captureMessage);
+            actionCost = enemy.captureAP;
+            statusMessage = $"敌方{captureMessage} 消耗 {actionCost} AP。";
+            if (enemyActionDisplayDelay > 0f) yield return new WaitForSecondsRealtime(enemyActionDisplayDelay);
+            if (gameplayPaused || battleEnded) yield break;
+        }
+        else if (battlefield.IsCity(enemy.q, enemy.r) && battlefield.GetCityOwner(enemy.q, enemy.r) != enemy.team && enemy.canCapture)
+        {
+            battlefield.CaptureCity(enemy.q, enemy.r, enemy.team);
+            actionCost = enemy.captureAP;
             statusMessage = $"敌方占领城市，消耗 {actionCost} AP。";
-            if (enemyActionDisplayDelay > 0f)
-                yield return new WaitForSecondsRealtime(enemyActionDisplayDelay);
+            if (enemyActionDisplayDelay > 0f) yield return new WaitForSecondsRealtime(enemyActionDisplayDelay);
+            if (gameplayPaused || battleEnded) yield break;
         }
         else if (moveCost == 0)
         {
@@ -1405,15 +1429,14 @@ public class HexUnitDemo : MonoBehaviour
         GUILayout.BeginArea(rect, GUI.skin.box);
         GUILayout.Label("我方资源");
         // Resource values are intentionally placeholders until the economy system is connected.
-        GUILayout.Label("金钱：待接入　劳动力：待接入");
-        GUILayout.Label("铁矿：待接入　铝矿：待接入");
+        GUILayout.Label(buildingEconomy != null ? buildingEconomy.GetResourceSummary(0) : "经济系统尚未初始化。");
         GUILayout.Label($"战场 AP：{battleTimeAP:0}");
         GUILayout.Label(simulationRunning ? "阶段：敌方行动 / 时间推进中" : "阶段：等待我方操作");
         if (!string.IsNullOrEmpty(statusMessage))
             GUILayout.Label(statusMessage);
-        if (!simulationRunning && !HasReadyBlueUnit() &&
-            GUILayout.Button("推进战场时间 / 执行敌方行动"))
-            StartCoroutine(RunSimulationUntilPlayerCanAct());
+        if (GUILayout.Button("局内菜单（Esc）") && gameFlowController != null) gameFlowController.OpenPauseMenuFromHUD();
+        if (!gameplayPaused && !battleEnded && !simulationRunning && !HasReadyBlueUnit() &&
+            GUILayout.Button("推进战场时间 / 执行敌方行动")) StartCoroutine(RunSimulationUntilPlayerCanAct());
         GUILayout.EndArea();
     }
 
@@ -1536,7 +1559,8 @@ public class HexUnitDemo : MonoBehaviour
         GUILayout.Label($"移动力消耗：步兵 {battlefield.GetMovementPointCost(q, r, HexUnitClass.Infantry)}；重型 {battlefield.GetMovementPointCost(q, r, HexUnitClass.HeavyGround)}；空军 {battlefield.GetMovementPointCost(q, r, HexUnitClass.Air)}");
         GUILayout.Label($"地块 AP 成本：步兵 {TerrainAPCost(q, r, HexUnitClass.Infantry)}；空军 {TerrainAPCost(q, r, HexUnitClass.Air)}");
         GUILayout.Label($"地块加成：{battlefield.GetTerrainBonusDescription(q, r)}");
-        if (battlefield.IsCity(q, r))
+        if (buildingEconomy != null) buildingEconomy.DrawTileControls(selectedUnit == null ? 0 : selectedUnit.team, q, r, this);
+        else if (battlefield.IsCity(q, r))
         {
             int owner = battlefield.GetCityOwner(q, r);
             GUILayout.Label($"城市归属：{(owner == 0 ? "我方" : owner == 1 ? "敌方" : "无主")}");
