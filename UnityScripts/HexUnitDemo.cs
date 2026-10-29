@@ -447,10 +447,11 @@ public class HexUnitDemo : MonoBehaviour
     private bool PointerOverHud()
     {
         Vector2 p = GetPointerGuiPosition();
-        if (GetResourcePanelRect().Contains(p) ||
-            GetAPTimelinePanelRect().Contains(p) ||
-            GetUnitInfoPanelRect().Contains(p) ||
-            (selectedUnit != null && (hasSelectedTile || selectedUnit != null) && GetTileInfoPanelRect().Contains(p)))
+        if (GetResourcePanelRect().Contains(p) || GetAPTimelinePanelRect().Contains(p))
+            return true;
+        if (selectedUnit != null && GetUnitInfoPanelRect().Contains(p))
+            return true;
+        if ((selectedUnit != null || hasSelectedTile) && GetTileInfoPanelRect().Contains(p))
             return true;
         return IsActionMenuVisible() && GetActionMenuRect().Contains(p);
     }
