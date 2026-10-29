@@ -16,14 +16,22 @@ public class HexBattlefieldDemo : MonoBehaviour
     public float cameraBackOffset = 18f;
     [Range(30f, 80f)] public float cameraFieldOfView = 55f;
 
+    [Header("Camera Controls")]
+    [Min(0.1f)] public float cameraPanSensitivity = 1f;
+    [Min(0.01f)] public float cameraRotationSensitivity = 0.25f;
+    [Range(10f, 60f)] public float minimumCameraPolarAngle = 20f;
+    [Range(45f, 89f)] public float maximumCameraPolarAngle = 80f;
+
     [Header("Movement Highlight")]
     public Color reachableTileColor = new Color(0.18f, 0.78f, 0.88f);
+    public Color actionTargetColor = new Color(1f, 0.42f, 0.08f);
     public Color neutralCityColor = new Color(0.75f, 0.69f, 0.42f);
     public Color blueCityColor = new Color(0.18f, 0.42f, 0.82f);
     public Color redCityColor = new Color(0.78f, 0.22f, 0.20f);
 
     private Mesh hexMesh;
     private Camera mainCamera;
+    private Vector3 cameraFocus;
     private readonly Dictionary<Collider, TileInfo> tilesByCollider = new Dictionary<Collider, TileInfo>();
     private readonly Dictionary<Vector2Int, TileInfo> tilesByCoordinates = new Dictionary<Vector2Int, TileInfo>();
 
@@ -34,6 +42,7 @@ public class HexBattlefieldDemo : MonoBehaviour
         public Material material;
         public Color baseColor;
         public bool isReachable;
+        public bool isActionTarget;
         public int ownerTeam = -1; // -1 neutral, 0 blue, 1 red
     }
 
@@ -116,10 +125,51 @@ public class HexBattlefieldDemo : MonoBehaviour
     {
         mainCamera = Camera.main;
         if (mainCamera == null) { Debug.LogWarning("No MainCamera found."); return; }
-        Vector3 center = GetMapCenter();
-        mainCamera.transform.position = center + new Vector3(0f, cameraHeight, -cameraBackOffset);
-        mainCamera.transform.LookAt(center);
+        cameraFocus = GetMapCenter();
+        mainCamera.transform.position = cameraFocus + new Vector3(0f, cameraHeight, -cameraBackOffset);
+        mainCamera.transform.LookAt(cameraFocus);
         mainCamera.fieldOfView = cameraFieldOfView;
+    }
+
+    public void PanCameraByPixels(Vector2 pixelDelta)
+    {
+        if (mainCamera == null) mainCamera = Camera.main;
+        if (mainCamera == null || Screen.height <= 0) return;
+        float distance = Vector3.Distance(mainCamera.transform.position, cameraFocus);
+        float worldPerPixel = 2f * distance *
+            Mathf.Tan(mainCamera.fieldOfView * 0.5f * Mathf.Deg2Rad) / Screen.height * cameraPanSensitivity;
+
+        Vector3 right = mainCamera.transform.right;
+        right.y = 0f;
+        if (right.sqrMagnitude > 0.001f) right.Normalize();
+        Vector3 forward = mainCamera.transform.forward;
+        forward.y = 0f;
+        if (forward.sqrMagnitude > 0.001f) forward.Normalize();
+        Vector3 movement = (-right * pixelDelta.x - forward * pixelDelta.y) * worldPerPixel;
+        mainCamera.transform.position += movement;
+        cameraFocus += movement;
+    }
+
+    public void RotateCameraByPixels(Vector2 pixelDelta)
+    {
+        if (mainCamera == null) mainCamera = Camera.main;
+        if (mainCamera == null) return;
+        mainCamera.transform.RotateAround(cameraFocus, Vector3.up,
+            pixelDelta.x * cameraRotationSensitivity);
+
+        Vector3 offset = mainCamera.transform.position - cameraFocus;
+        if (offset.sqrMagnitude > 0.001f)
+        {
+            float polarAngle = Vector3.Angle(offset.normalized, Vector3.up);
+            float desiredPolarAngle = Mathf.Clamp(
+                polarAngle - pixelDelta.y * cameraRotationSensitivity,
+                Mathf.Min(minimumCameraPolarAngle, maximumCameraPolarAngle),
+                Mathf.Max(minimumCameraPolarAngle, maximumCameraPolarAngle));
+            float polarDelta = desiredPolarAngle - polarAngle;
+            if (Mathf.Abs(polarDelta) > 0.001f)
+                mainCamera.transform.RotateAround(cameraFocus, mainCamera.transform.right, polarDelta);
+        }
+        mainCamera.transform.LookAt(cameraFocus);
     }
 
     public bool IsInsideMap(int q, int r) => q >= 0 && q < columns && r >= 0 && r < rows;
@@ -259,10 +309,20 @@ public class HexBattlefieldDemo : MonoBehaviour
         foreach (TileInfo tile in tilesByCoordinates.Values) RefreshTileColor(tile);
     }
 
+    public void SetActionHighlights(IEnumerable<Vector2Int> coordinates)
+    {
+        foreach (TileInfo tile in tilesByCoordinates.Values) tile.isActionTarget = false;
+        if (coordinates != null)
+            foreach (Vector2Int coordinate in coordinates)
+                if (tilesByCoordinates.TryGetValue(coordinate, out TileInfo tile)) tile.isActionTarget = true;
+        foreach (TileInfo tile in tilesByCoordinates.Values) RefreshTileColor(tile);
+    }
+
     private void RefreshTileColor(TileInfo tile)
     {
         if (tile.material == null) return;
         if (tile.isReachable) { tile.material.color = reachableTileColor; return; }
+        if (tile.isActionTarget) { tile.material.color = actionTargetColor; return; }
         if (tile.terrain == "City")
             tile.material.color = tile.ownerTeam == 0 ? blueCityColor : tile.ownerTeam == 1 ? redCityColor : neutralCityColor;
         else tile.material.color = tile.baseColor;
