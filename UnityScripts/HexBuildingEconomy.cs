@@ -156,6 +156,20 @@ public class HexBuildingEconomy : MonoBehaviour
         return wallet;
     }
 
+    public void ResetForNewBattle(HexUnitDemo driver)
+    {
+        if (driver != null) unitController = driver;
+        foreach (BuildingState building in buildings)
+            if (building != null && building.marker != null)
+                Destroy(building.marker);
+        buildings.Clear();
+        buildingsByCoordinate.Clear();
+        wallets.Clear();
+        initialized = false;
+        resultWasReported = false;
+        InitializeForBattlefield(battlefield != null ? battlefield : GetComponent<HexBattlefieldDemo>(), unitController);
+    }
+
     private void BuildBuildings()
     {
         buildings.Clear();
