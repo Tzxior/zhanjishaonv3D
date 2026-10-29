@@ -665,8 +665,11 @@ public class HexBuildingEconomy : MonoBehaviour
 
         if (!IsFactory(building.type)) return;
 
+        int unitTeam = -1;
+        string unitName = string.Empty;
+        string unitCategory = string.Empty;
         bool occupied = driver != null &&
-            driver.TryGetUnitAtTile(q, r, out int unitTeam, out string unitName, out string unitCategory);
+            driver.TryGetUnitAtTile(q, r, out unitTeam, out unitName, out unitCategory);
         if (occupied)
         {
             GUILayout.Label($"驻扎单位：{unitName}（{TeamName(unitTeam)}）");
