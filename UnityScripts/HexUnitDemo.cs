@@ -1418,7 +1418,7 @@ public class HexUnitDemo : MonoBehaviour
 
     private void OnGUI()
     {
-        if (!showBattleHUD) return;
+        if (!showBattleHUD || gameplayPaused || battleEnded) return;
 
         DrawResourceHUD();
         DrawAPTimelineHUD();
