@@ -549,6 +549,8 @@ public class HexUnitDemo : MonoBehaviour
         {
             if(target.carrier != null)
             { if(target.renderer != null) target.renderer.enabled = false; continue; }
+            if (target.isSkinChest)
+            { if (target.renderer != null) target.renderer.enabled = true; continue; }
             if(target.renderer == null || target.team == 0) continue;
             bool detected = false;
             foreach(UnitInfo observer in units)
@@ -1225,6 +1227,7 @@ public class HexUnitDemo : MonoBehaviour
                 enemy.lastFrame = -1;
                 if (enemyActionDisplayDelay > 0f)
                     yield return new WaitForSecondsRealtime(enemyActionDisplayDelay);
+                if (gameplayPaused || battleEnded) yield break;
             }
         }
 
@@ -1247,6 +1250,7 @@ public class HexUnitDemo : MonoBehaviour
             }
             if (enemyActionDisplayDelay > 0f)
                 yield return new WaitForSecondsRealtime(enemyActionDisplayDelay);
+            if (gameplayPaused || battleEnded) yield break;
         }
         else if (enemy.canCapture && buildingEconomy != null && buildingEconomy.CanCaptureAt(enemy.q, enemy.r, enemy.team))
         {
@@ -1605,9 +1609,12 @@ public class HexUnitDemo : MonoBehaviour
         DrawConfiguredActionButtons(ready);
         if (selectedUnit != menuUnit) return;
 
-        GUI.enabled = ready && !attackMode && battlefield.IsCity(menuUnit.q, menuUnit.r) &&
-            battlefield.GetCityOwner(menuUnit.q, menuUnit.r) != 0 && menuUnit.canCapture;
-        if (GUILayout.Button($"占领城市（{menuUnit.captureAP} AP）")) OccupyCity();
+        bool canCaptureBuilding = buildingEconomy != null &&
+            buildingEconomy.CanCaptureAt(menuUnit.q, menuUnit.r, menuUnit.team);
+        bool canCaptureLegacyCity = battlefield.IsCity(menuUnit.q, menuUnit.r) &&
+            battlefield.GetCityOwner(menuUnit.q, menuUnit.r) != menuUnit.team;
+        GUI.enabled = ready && !attackMode && menuUnit.canCapture && (canCaptureBuilding || canCaptureLegacyCity);
+        if (GUILayout.Button($"占领建筑/城市（{menuUnit.captureAP} AP）")) OccupyCity();
         if (selectedUnit != menuUnit) return;
 
         GUI.enabled = ready && !attackMode;
