@@ -645,19 +645,40 @@ public class HexUnitDemo : MonoBehaviour
     }
 
     // Every live unit receives a unique integer AP node, regardless of faction.
-    // During initial setup, list order resolves the otherwise simultaneous AP=0 tie.
+    // Initial ties are resolved round-robin by faction ID so one team is not given
+    // all of the first action slots simply because its units were spawned first.
     private void InitializeUniqueActionNodes()
     {
-        HashSet<int> occupiedNodes = new HashSet<int>();
+        var activeUnits = new List<UnitInfo>();
+        var teamIds = new List<int>();
         foreach (UnitInfo unit in units)
         {
             if (unit == null || unit.carrier != null) continue;
-            int candidate = 0;
-            while (occupiedNodes.Contains(candidate)) candidate++;
-            unit.nextReadyTime = candidate;
-            unit.zeroCostActedAtTime = -1f;
-            occupiedNodes.Add(candidate);
+            activeUnits.Add(unit);
+            if (!teamIds.Contains(unit.team)) teamIds.Add(unit.team);
         }
+        teamIds.Sort();
+
+        var assigned = new HashSet<UnitInfo>();
+        int nextNode = 0;
+        bool assignedAny;
+        do
+        {
+            assignedAny = false;
+            foreach (int teamId in teamIds)
+            {
+                foreach (UnitInfo unit in activeUnits)
+                {
+                    if (assigned.Contains(unit) || unit.team != teamId) continue;
+                    unit.nextReadyTime = nextNode++;
+                    unit.zeroCostActedAtTime = -1f;
+                    assigned.Add(unit);
+                    assignedAny = true;
+                    break;
+                }
+            }
+        }
+        while (assignedAny);
     }
 
     // The unit being rescheduled is excluded from the collision test. Any other unit
@@ -1252,7 +1273,10 @@ public class HexUnitDemo : MonoBehaviour
         GUILayout.Label($"载运：{(selectedUnit.resourceCapacity < 0 ? "待确认" : selectedUnit.cargo.Count + "/" + selectedUnit.resourceCapacity)}");
         GUILayout.Label($"侦察：{(selectedUnit.reconRange < 0 ? "待确认" : selectedUnit.reconRange + " 格")}　隐蔽：{(selectedUnit.concealment < 0 ? "待确认" : selectedUnit.concealment + "/100")}");
         GUILayout.Label($"移动力：{selectedUnit.movementPower}　暂记移动 AP：{selectedUnit.pendingMoveAP}");
-        GUILayout.Label($"占领能力：{(selectedUnit.canCapture ? "可以" : "不可以")}　状态：{(IsUnitReady(selectedUnit) ? "就绪" : $"等待 {Mathf.Max(0, Mathf.CeilToInt(selectedUnit.nextReadyTime - battleTimeAP))} AP")}");
+        string actionReadiness = IsUnitReady(selectedUnit)
+            ? "就绪"
+            : "等待 " + Mathf.Max(0, Mathf.CeilToInt(selectedUnit.nextReadyTime - battleTimeAP)) + " AP";
+        GUILayout.Label($"占领能力：{(selectedUnit.canCapture ? "可以" : "不可以")}　状态：{actionReadiness}");
         if (!string.IsNullOrWhiteSpace(selectedUnit.description))
             GUILayout.Label($"定位：{selectedUnit.description}");
         if (selectedUnit.actions != null && selectedUnit.actions.Length > 0)
