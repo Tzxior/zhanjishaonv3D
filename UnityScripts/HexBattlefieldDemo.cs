@@ -236,22 +236,13 @@ public class HexBattlefieldDemo : MonoBehaviour
                 break;
 
             case "City":
+                // City terrain is a paved footprint; the actual city/building silhouette is drawn by HexBuildingEconomy.
                 AddTerrainPart(tile, PrimitiveType.Cube, "CityPlaza",
                     new Vector3(0f, top + 0.015f, 0f), new Vector3(0.88f, 0.035f, 0.76f) * size,
                     new Color(0.38f, 0.39f, 0.38f), shader);
-                for (int i = 0; i < 3; i++)
-                {
-                    float x = (i - 1) * 0.25f * size;
-                    float h = (i == 1 ? 0.24f : 0.17f) * size;
-                    AddTerrainPart(tile, PrimitiveType.Cube, "CityBlock",
-                        new Vector3(x, top + h * 0.55f, (i % 2 == 0 ? 0.16f : -0.12f) * size),
-                        new Vector3(0.19f, h, 0.20f) * size,
-                        new Color(0.56f, 0.56f, 0.52f), shader);
-                    AddTerrainPart(tile, PrimitiveType.Cube, "CityRoof",
-                        new Vector3(x, top + h + 0.008f, (i % 2 == 0 ? 0.16f : -0.12f) * size),
-                        new Vector3(0.20f, 0.025f, 0.21f) * size,
-                        new Color(0.26f, 0.29f, 0.32f), shader);
-                }
+                AddTerrainPart(tile, PrimitiveType.Cube, "CityStreet",
+                    new Vector3(0f, top + 0.037f, 0f), new Vector3(0.64f, 0.008f, 0.035f) * size,
+                    new Color(0.76f, 0.75f, 0.68f), shader, new Vector3(0f, 30f, 0f));
                 break;
 
             default: // Grassland remains open, with small tufts so it does not look identical to a blank tile.
