@@ -12,7 +12,14 @@ This development branch contains a first implementation pass for:
 - Player faction selection on the post-level skin selection screen, defaulting to red and saved with PlayerPrefs. Blue, green, yellow, purple and black palettes are also included. Team IDs remain team 0 = player and team 1 = opponent, so faction color changes do not swap combat logic.
 - Faction identity is displayed through colored unit ground rings, city ownership tint and building base/banner markers. Faction definitions also expose future stat multipliers (attack, HP, defenses, movement and production cost), all neutral by default.
 - Generated terrain visuals now add raised trees, hills, rocks, water ripples, road markings, city blocks and short terrain-code icons. These are visual-only and their colliders are disabled so existing tile raycasts/movement rules continue to use the original hex tile.
-- Buildings now use different primitive silhouettes for HQ, city, village, arsenal, factories, shipyard, airport and mines, with a separate faction-colored base and flag banner.
+- Buildings now use different primitive silhouettes for HQ, city, village, barracks, factories, shipyard, airport and mines, with a separate faction-colored base and flag banner.
+- Building labels are billboarded toward the camera with corrected front-side orientation and half-size display.
+- Road tiles automatically draw connected road arms based on all six neighboring hexes, including 3-way, 4-way and 6-way junctions; the prototype map now includes a third diagonal road corridor.
+- Camera tilt is constrained to a 30–60 degree pitch range, including older serialized Inspector values.
+- Ready player units receive cyan pulsing hex outlines, the selected unit gets a gold outline, and the currently acting enemy gets an orange outline when visible. Damaged unit sprites flash red for about 0.48 seconds.
+- Unit sprite base-height was lowered to 0.045 world units; the setting was renamed so older serialized scene values do not override the new offset.
+- The five production building types now auto-generate production choices from `GadgetUnitProfiles.json` when the Inspector production list is empty. An occupied factory hides production choices; matching friendly units are automatically restored every 10 AP using the existing +10 HP / +1 ammo / +2 fuel rule.
+- The `Arsenal` building is now displayed as `兵营` (the serialized enum value remains unchanged for compatibility).
 - The local fixes for `tileInfoScrollPosition` and `victoryWhenAllHostileUnitsDefeated` are preserved in the updated `HexUnitDemo.cs`.
 
 Important: this is a code update, not proof of a successful Unity build. The changes have not yet been compiled or Play-tested inside the user's Unity Editor. Test the steps below before treating this as a stable release.
@@ -40,7 +47,7 @@ Action metadata also includes `actionAPCost`, `damageMultiplier`, `damageType`, 
 
 Limitation: the current movement enum has no distinct Amphibious class, so the CSV `两栖` row for `transport_ship` maps to the existing Naval enum (3). Movement rules need a dedicated amphibious class in a later gameplay pass.
 
-Unit production prices are now stored in JSON and shown in the unit codex. The factory's production queue still uses its separate Inspector `productionProfiles` list; it is not yet auto-populated from these JSON cost fields.
+Unit production prices are stored in JSON and shown in the unit codex. If the Inspector `productionProfiles` array is empty, the five factory types now generate production choices from the JSON fields. A non-empty Inspector array remains an intentional override.
 
 ## Unity files to copy/sync
 
@@ -56,15 +63,18 @@ Do not place duplicate copies of the same C# classes under another folder in `As
 ## First Unity test pass
 
 1. Wait for compilation and check that Console has no red errors.
-2. Select a ready blue unit. Click Move: the large HUD/action panels should hide and reachable tiles should stay cyan. Click a reachable empty tile: the unit moves and the action menu returns.
-3. Click an attack skill. The menu should hide; visible, legal enemy targets should turn orange. Escape or a plain right-click cancels target selection.
-4. Test a `rockets` unit: distance 1–2 must be rejected; distance 3–6 is its current CSV range. The default 9×9 map may not start with rocket artillery, so add a temporary test spawn/profile.
-5. Left-drag pans and right-drag rotates the view. A drag must not also select a tile/unit. Starting a drag over HUD panels must not move the camera.
-6. On the post-level skin selection screen, verify red is selected by default. Switch to green or purple, start Test001, and confirm player unit rings, city ownership tint and owned-building banners follow the chosen color while enemy markers stay blue. Restart and make sure the selected faction persists.
-7. Walk through the map and compare tree, hill, mountain, water, road, dryland and city silhouettes/icons; clicking and movement should still be registered by the underlying tile, not a decoration.
-8. Test ammunition: a skill with `consumesAmmo=true` must require and consume ammo; a skill with `consumesAmmo=false` must remain usable when a unit's ammo is empty.
-9. Confirm the main menu and other front-end screens show an opaque abstract navy background, not the Test001 battlefield. Pause, result and in-battle settings should still show the battlefield.
-10. Verify Pause, Resume, Surrender, restart, AP timing, experience, building capture and factory production.
+2. Confirm building labels are readable and half-size, and the camera cannot tilt beyond the 30–60 degree range.
+3. Select a ready player unit. Click Move: the large HUD/action panels should hide and reachable tiles should stay cyan. Click a reachable empty tile: the unit moves and the action menu returns.
+4. Click an attack skill. The menu should hide; visible, legal enemy targets should turn orange. Escape or a plain right-click cancels target selection.
+5. Test a `rockets` unit: distance 1–2 must be rejected; distance 3–6 is its current CSV range. The default 9×9 map may not start with rocket artillery, so add a temporary test spawn/profile.
+6. Left-drag pans and right-drag rotates the view. A drag must not also select a tile/unit. Starting a drag over HUD panels must not move the camera.
+7. On the post-level skin selection screen, verify red is selected by default. Switch to green or purple, start Test001, and confirm player unit rings, city ownership tint and owned-building banners follow the chosen color while enemy markers stay blue. Restart and make sure the selected faction persists.
+8. Walk through the map and compare tree, hill, mountain, water, road, dryland and city silhouettes/icons. Confirm connected road seams and 3-way/4-way/6-way junctions; clicking and movement should still be registered by the underlying tile, not decoration.
+9. Confirm all ready player units have a pulsing cyan hex outline, the selected unit is gold, the acting visible enemy is orange, and damaged unit sprites flash red briefly.
+10. Test a friendly unit on each matching owned production building: it should automatically recover +10 HP, +1 ammo, +2 fuel every 10 AP, and the factory UI should not show production choices while occupied. Empty owned factory tiles should show unit production choices from the JSON with money/labour/mineral requirements.
+11. Test ammunition: a skill with `consumesAmmo=true` must require and consume ammo; a skill with `consumesAmmo=false` must remain usable when a unit's ammo is empty.
+12. Confirm the main menu and other front-end screens show an opaque abstract navy background, not the Test001 battlefield. Pause, result and in-battle settings should still show the battlefield.
+13. Verify Pause, Resume, Surrender, restart, AP timing, experience, building capture and factory production.
 
 The factory queue still reads its own Inspector list; JSON production costs are not automatically wired into production until that integration step is implemented.
 
@@ -144,7 +154,7 @@ Use reusable prefabs with a common root/selection anchor and a separate owner ba
 - Headquarters: largest silhouette, command tower/radar/flag.
 - Large city: several dense blocks; small city: a compact cluster of buildings.
 - Village: two or three small houses.
-- Arsenal: ammunition crates / warehouse.
+- Barracks (serialized enum `Arsenal`): ammunition crates / warehouse.
 - Tank factory: industrial shed with crane or tank silhouette.
 - Artillery factory: factory plus artillery-barrel silhouette.
 - Shipyard: water edge, dock and ship silhouette.
