@@ -233,6 +233,13 @@ public class HexGameFlowController : MonoBehaviour
         if (battle != null) battle.SetGameplayPaused(false);
     }
 
+    public void OpenPauseMenuFromHUD()
+    {
+        if (screen != ScreenState.Battle) return;
+        screen = ScreenState.Pause;
+        if (battle != null) battle.SetGameplayPaused(true);
+    }
+
     private void OpenSettings()
     {
         settingsReturnScreen = screen;
@@ -446,10 +453,10 @@ public class HexGameFlowController : MonoBehaviour
         GUILayout.Space(18);
         if (GUILayout.Button("确认投降", GUILayout.Height(42f)))
         {
+            battle.RequestSurrender();
             screen = ScreenState.Result;
             playerWon = false;
             resultReason = "玩家选择投降。";
-            battle.SetGameplayPaused(true);
         }
         if (GUILayout.Button("返回战场菜单", GUILayout.Height(36f))) screen = ScreenState.Pause;
     }
