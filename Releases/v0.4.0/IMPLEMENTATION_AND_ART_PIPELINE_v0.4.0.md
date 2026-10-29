@@ -9,6 +9,10 @@ This development branch contains a first implementation pass for:
 - Per-action `rangeConfigured`, `minRange`, `maxRange`, AP cost, damage type/multiplier, and ammo-consumption fields in `GadgetUnitProfiles.json`.
 - Unit production money, labour, iron, aluminium, and AP cost fields populated from the latest user-provided CSV.
 - A fully opaque abstract front-end backdrop so Main Menu, Level Select, Skin Select, Unit Codex and Skin Codex do not show the generated Test001 battlefield underneath.
+- Player faction selection on the post-level skin selection screen, defaulting to red and saved with PlayerPrefs. Blue, green, yellow, purple and black palettes are also included. Team IDs remain team 0 = player and team 1 = opponent, so faction color changes do not swap combat logic.
+- Faction identity is displayed through colored unit ground rings, city ownership tint and building base/banner markers. Faction definitions also expose future stat multipliers (attack, HP, defenses, movement and production cost), all neutral by default.
+- Generated terrain visuals now add raised trees, hills, rocks, water ripples, road markings, city blocks and short terrain-code icons. These are visual-only and their colliders are disabled so existing tile raycasts/movement rules continue to use the original hex tile.
+- Buildings now use different primitive silhouettes for HQ, city, village, arsenal, factories, shipyard, airport and mines, with a separate faction-colored base and flag banner.
 - The local fixes for `tileInfoScrollPosition` and `victoryWhenAllHostileUnitsDefeated` are preserved in the updated `HexUnitDemo.cs`.
 
 Important: this is a code update, not proof of a successful Unity build. The changes have not yet been compiled or Play-tested inside the user's Unity Editor. Test the steps below before treating this as a stable release.
@@ -43,6 +47,12 @@ The user's actual Unity project root is a separate folder: `D:\\GitHub\\zhanjish
 
 Do not place duplicate copies of the same C# classes under another folder in `Assets`; duplicate class definitions will cause compile errors. Keep `GadgetUnitProfiles.json` under `Resources` because the current loader uses `Resources.Load<TextAsset>("GadgetUnitProfiles")`.
 
+## Faction and visual system
+
+Player team ID remains 0 and opponent team ID remains 1. This is deliberate: changing faction colors must not change AI scheduling, capture rules, or win/loss checks. The current default is red for the player and blue for the opponent. The selected player faction ID is saved to `PlayerPrefs`; the selector lives on the screen reached after choosing a level. A faction definition carries a color and neutral-by-default modifiers for attack, HP, bullet/explosion defense, movement and production cost. No special faction passive is currently configured.
+
+The current terrain/building artwork is generated from simple Unity primitives as a readability pass, not final authored art or prefab assets. Terrain decorators disable their colliders. Tile terrain IDs remain the authoritative source for movement, defense and traversal. Each building type has a distinct silhouette plus an independent faction-colored base/banner; taking over a building updates only its own ownership markers.
+
 ## First Unity test pass
 
 1. Wait for compilation and check that Console has no red errors.
@@ -50,9 +60,11 @@ Do not place duplicate copies of the same C# classes under another folder in `As
 3. Click an attack skill. The menu should hide; visible, legal enemy targets should turn orange. Escape or a plain right-click cancels target selection.
 4. Test a `rockets` unit: distance 1–2 must be rejected; distance 3–6 is its current CSV range. The default 9×9 map may not start with rocket artillery, so add a temporary test spawn/profile.
 5. Left-drag pans and right-drag rotates the view. A drag must not also select a tile/unit. Starting a drag over HUD panels must not move the camera.
-6. Test ammunition: a skill with `consumesAmmo=true` must require and consume ammo; a skill with `consumesAmmo=false` must remain usable when a unit's ammo is empty.
-7. Confirm the main menu and other front-end screens show an opaque abstract navy background, not the Test001 battlefield. Pause, result and in-battle settings should still show the battlefield.
-8. Verify Pause, Resume, Surrender, restart, AP timing, experience, building capture and factory production.
+6. On the post-level skin selection screen, verify red is selected by default. Switch to green or purple, start Test001, and confirm player unit rings, city ownership tint and owned-building banners follow the chosen color while enemy markers stay blue. Restart and make sure the selected faction persists.
+7. Walk through the map and compare tree, hill, mountain, water, road, dryland and city silhouettes/icons; clicking and movement should still be registered by the underlying tile, not a decoration.
+8. Test ammunition: a skill with `consumesAmmo=true` must require and consume ammo; a skill with `consumesAmmo=false` must remain usable when a unit's ammo is empty.
+9. Confirm the main menu and other front-end screens show an opaque abstract navy background, not the Test001 battlefield. Pause, result and in-battle settings should still show the battlefield.
+10. Verify Pause, Resume, Surrender, restart, AP timing, experience, building capture and factory production.
 
 The factory queue still reads its own Inspector list; JSON production costs are not automatically wired into production until that integration step is implemented.
 
