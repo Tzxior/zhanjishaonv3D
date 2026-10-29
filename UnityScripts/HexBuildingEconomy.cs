@@ -574,6 +574,8 @@ public class HexBuildingEconomy : MonoBehaviour
         {
             ProductionOrder order = building.activeOrder;
             if (order == null) continue;
+            // Capturing a factory pauses the previous owner's active order; it does not transfer the unit.
+            if (building.ownerTeam != order.team) continue;
             if (HasResourceShortage(order.team))
                 order.progress += 0.5f;
             else
