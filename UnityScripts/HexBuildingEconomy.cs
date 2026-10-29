@@ -316,6 +316,13 @@ public class HexBuildingEconomy : MonoBehaviour
         }
 
         int previousOwner = building.ownerTeam;
+        bool cancelledProduction = false;
+        if (building.activeOrder != null && building.activeOrder.team != newOwner)
+        {
+            ReleaseProductionReservation(building.activeOrder);
+            building.activeOrder = null;
+            cancelledProduction = true;
+        }
         building.ownerTeam = newOwner;
         if (newOwner >= 0) EnsureWallet(newOwner);
         if (newOwner >= 0) GrantCaptureLabour(newOwner, building.type);
@@ -325,7 +332,7 @@ public class HexBuildingEconomy : MonoBehaviour
             battlefield.CaptureCity(q, r, newOwner);
 
         RefreshMarker(building);
-        message = $"已占领{ShortName(building.type)}。";
+        message = $"已占领{ShortName(building.type)}。" + (cancelledProduction ? " 原生产项目已取消。" : "");
 
         if (building.type == HexBuildingType.Headquarters && previousOwner >= 0 && previousOwner != newOwner)
         {
@@ -568,6 +575,15 @@ public class HexBuildingEconomy : MonoBehaviour
                wallet.reservedAluminium > GetAluminiumCapacity(team);
     }
 
+    private void ReleaseProductionReservation(ProductionOrder order)
+    {
+        if (order == null || order.profile == null) return;
+        TeamWallet wallet = EnsureWallet(order.team);
+        wallet.reservedLabour = Mathf.Max(0, wallet.reservedLabour - order.profile.labourRequired);
+        wallet.reservedIron = Mathf.Max(0, wallet.reservedIron - order.profile.ironRequired);
+        wallet.reservedAluminium = Mathf.Max(0, wallet.reservedAluminium - order.profile.aluminiumRequired);
+    }
+
     private void TickProduction(HexUnitDemo driver)
     {
         foreach (BuildingState building in buildings)
@@ -587,10 +603,7 @@ public class HexBuildingEconomy : MonoBehaviour
             if (driver == null || !driver.TrySpawnProducedUnit(order.profile.unitId, order.team, building.q, building.r))
                 continue; // Keep the completed order and resource reservation until a spawn tile is free.
 
-            TeamWallet wallet = EnsureWallet(order.team);
-            wallet.reservedLabour = Mathf.Max(0, wallet.reservedLabour - order.profile.labourRequired);
-            wallet.reservedIron = Mathf.Max(0, wallet.reservedIron - order.profile.ironRequired);
-            wallet.reservedAluminium = Mathf.Max(0, wallet.reservedAluminium - order.profile.aluminiumRequired);
+            ReleaseProductionReservation(order);
             building.activeOrder = null;
         }
     }
