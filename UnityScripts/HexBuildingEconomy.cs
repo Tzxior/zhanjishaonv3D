@@ -279,12 +279,8 @@ public class HexBuildingEconomy : MonoBehaviour
     {
         if (driver != null) unitController = driver;
         foreach (BuildingState building in buildings)
-        {
             if (building != null && building.marker != null)
                 Destroy(building.marker);
-            if (building != null && building.productionBarRoot != null)
-                Destroy(building.productionBarRoot);
-        }
         buildings.Clear();
         buildingsByCoordinate.Clear();
         wallets.Clear();
