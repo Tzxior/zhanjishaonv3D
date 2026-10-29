@@ -65,6 +65,30 @@ public class HexBattlefieldDemo : MonoBehaviour
         return new Vector3(x, 0f, z);
     }
 
+    public void RebuildMap(int newColumns, int newRows)
+    {
+        columns = Mathf.Max(1, newColumns);
+        rows = Mathf.Max(1, newRows);
+
+        // Remove only generated map roots; unit/building/controller objects live beside these roots.
+        var oldMapRoots = new List<GameObject>();
+        for (int i = 0; i < transform.childCount; i++)
+        {
+            Transform child = transform.GetChild(i);
+            if (child.name.StartsWith("Hex_") || child.name == "HexMapBackdrop")
+                oldMapRoots.Add(child.gameObject);
+        }
+        foreach (GameObject oldRoot in oldMapRoots)
+            Destroy(oldRoot);
+
+        tilesByCollider.Clear();
+        tilesByCoordinates.Clear();
+        if (hexMesh == null)
+            hexMesh = CreateHexPrismMesh(hexSize * 0.96f, tileThickness);
+        BuildMap();
+        PositionCamera();
+    }
+
     private void BuildMap()
     {
         Shader shader = Shader.Find("Universal Render Pipeline/Lit");
