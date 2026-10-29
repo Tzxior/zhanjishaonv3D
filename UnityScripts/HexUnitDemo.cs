@@ -207,6 +207,12 @@ public class HexUnitDemo : MonoBehaviour
     private float skinExplosionDefenseMultiplier = 1f;
     private float skinMovementMultiplier = 1f;
     private float skinProductionCostMultiplier = 1f;
+    private float opponentFactionAttackMultiplier = 1f;
+    private float opponentFactionHPMultiplier = 1f;
+    private float opponentFactionBulletDefenseMultiplier = 1f;
+    private float opponentFactionExplosionDefenseMultiplier = 1f;
+    private float opponentFactionMovementMultiplier = 1f;
+    private float opponentFactionProductionCostMultiplier = 1f;
     private HexBattlefieldDemo battlefield;
     private float battleTimeAP;
     private bool simulationRunning;
@@ -287,6 +293,17 @@ public class HexUnitDemo : MonoBehaviour
 
     public float GetSelectedSkinProductionCostMultiplier() => skinProductionCostMultiplier;
 
+    public void ConfigureOpponentFactionModifiers(float attack, float hp, float bulletDefense,
+        float explosionDefense, float movement, float productionCost)
+    {
+        opponentFactionAttackMultiplier = Mathf.Max(0.01f, attack);
+        opponentFactionHPMultiplier = Mathf.Max(0.01f, hp);
+        opponentFactionBulletDefenseMultiplier = Mathf.Max(0.01f, bulletDefense);
+        opponentFactionExplosionDefenseMultiplier = Mathf.Max(0.01f, explosionDefense);
+        opponentFactionMovementMultiplier = Mathf.Max(0.01f, movement);
+        opponentFactionProductionCostMultiplier = Mathf.Max(0.01f, productionCost);
+    }
+
     public void ConfigureFactionColors(Color playerColor, Color opponentColor)
     {
         if (battlefield == null) battlefield = GetComponent<HexBattlefieldDemo>();
@@ -305,14 +322,30 @@ public class HexUnitDemo : MonoBehaviour
 
     private void ApplyActiveSkin(UnitInfo unit)
     {
-        if (unit == null || unit.team != 0) return;
-        unit.maxHp = Mathf.Max(1, Mathf.RoundToInt(unit.maxHp * skinHPMultiplier));
-        unit.hp = unit.maxHp;
-        unit.baseAttackPower = Mathf.Max(0, Mathf.RoundToInt(unit.baseAttackPower * skinAttackMultiplier));
-        unit.attack = unit.baseAttackPower;
-        unit.bulletDefense = Mathf.Max(0, Mathf.RoundToInt(unit.bulletDefense * skinBulletDefenseMultiplier));
-        unit.explosionDefense = Mathf.Max(0, Mathf.RoundToInt(unit.explosionDefense * skinExplosionDefenseMultiplier));
-        unit.movementPower = Mathf.Max(1, Mathf.RoundToInt(unit.movementPower * skinMovementMultiplier));
+        if (unit == null) return;
+
+        // Player skin modifiers are combined with the selected player faction in the front-end.
+        if (unit.team == 0)
+        {
+            unit.maxHp = Mathf.Max(1, Mathf.RoundToInt(unit.maxHp * skinHPMultiplier));
+            unit.hp = unit.maxHp;
+            unit.baseAttackPower = Mathf.Max(0, Mathf.RoundToInt(unit.baseAttackPower * skinAttackMultiplier));
+            unit.attack = unit.baseAttackPower;
+            unit.bulletDefense = Mathf.Max(0, Mathf.RoundToInt(unit.bulletDefense * skinBulletDefenseMultiplier));
+            unit.explosionDefense = Mathf.Max(0, Mathf.RoundToInt(unit.explosionDefense * skinExplosionDefenseMultiplier));
+            unit.movementPower = Mathf.Max(1, Mathf.RoundToInt(unit.movementPower * skinMovementMultiplier));
+        }
+        else if (unit.team == 1)
+        {
+            // The opponent has its own faction modifiers, independent of the player's chosen skin.
+            unit.maxHp = Mathf.Max(1, Mathf.RoundToInt(unit.maxHp * opponentFactionHPMultiplier));
+            unit.hp = unit.maxHp;
+            unit.baseAttackPower = Mathf.Max(0, Mathf.RoundToInt(unit.baseAttackPower * opponentFactionAttackMultiplier));
+            unit.attack = unit.baseAttackPower;
+            unit.bulletDefense = Mathf.Max(0, Mathf.RoundToInt(unit.bulletDefense * opponentFactionBulletDefenseMultiplier));
+            unit.explosionDefense = Mathf.Max(0, Mathf.RoundToInt(unit.explosionDefense * opponentFactionExplosionDefenseMultiplier));
+            unit.movementPower = Mathf.Max(1, Mathf.RoundToInt(unit.movementPower * opponentFactionMovementMultiplier));
+        }
     }
 
     public void ResetForNewMatch()
