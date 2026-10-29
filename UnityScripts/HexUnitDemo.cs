@@ -147,6 +147,8 @@ public class HexUnitDemo : MonoBehaviour
         public int movementPower=6, movementAPLimit=100;
         public int attackAP=100, captureAP=50, restAP=0, attackRange=1;
         public bool canCapture;
+        public bool isSkinChest;
+        public string rewardSkinId;
     }
 
     private class PathNode
