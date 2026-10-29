@@ -302,7 +302,7 @@ public class HexUnitDemo : MonoBehaviour
     {
         if (battleEnded && !paused) return;
         gameplayPaused = paused;
-        if (!paused && !simulationRunning && !HasReadyBlueUnit())
+        if (!paused && !simulationRunning && !HasReadyPlayerActor())
             StartCoroutine(RunSimulationUntilPlayerCanAct());
     }
 
@@ -764,6 +764,7 @@ public class HexUnitDemo : MonoBehaviour
             return;
         }
 
+        SelectReadyPlayerBuildingIfNeeded();
         HandlePointerGestures(!gameplayPaused && !battleEnded && !simulationRunning);
     }
 
@@ -1468,9 +1469,29 @@ public class HexUnitDemo : MonoBehaviour
             activeUnits.Add(unit);
             if (!teamIds.Contains(unit.team)) teamIds.Add(unit.team);
         }
+
+        Vector2Int[] queuedBuildings = buildingEconomy != null
+            ? buildingEconomy.GetQueuedBuildingCoordinates()
+            : new Vector2Int[0];
+        foreach (Vector2Int coordinate in queuedBuildings)
+        {
+            if (buildingEconomy.TryGetBuildingAt(coordinate.x, coordinate.y,
+                out string name, out int owner, out HexBuildingType type) && !teamIds.Contains(owner))
+                teamIds.Add(owner);
+        }
         teamIds.Sort();
 
-        var assigned = new HashSet<UnitInfo>();
+        var actors = new List<InitialQueueActor>();
+        foreach (UnitInfo unit in activeUnits)
+            actors.Add(new InitialQueueActor { team = unit.team, unit = unit, isBuilding = false });
+        foreach (Vector2Int coordinate in queuedBuildings)
+        {
+            if (buildingEconomy.TryGetBuildingAt(coordinate.x, coordinate.y,
+                out string name, out int owner, out HexBuildingType type))
+                actors.Add(new InitialQueueActor { team = owner, building = coordinate, isBuilding = true });
+        }
+
+        var assigned = new HashSet<InitialQueueActor>();
         int nextNode = 0;
         bool assignedAny;
         do
@@ -1478,18 +1499,22 @@ public class HexUnitDemo : MonoBehaviour
             assignedAny = false;
             foreach (int teamId in teamIds)
             {
-                foreach (UnitInfo unit in activeUnits)
+                foreach (InitialQueueActor actor in actors)
                 {
-                    if (assigned.Contains(unit) || unit.team != teamId) continue;
-                    unit.nextReadyTime = nextNode++;
-                    unit.zeroCostActedAtTime = -1f;
-                    assigned.Add(unit);
+                    if (assigned.Contains(actor) || actor.team != teamId) continue;
+                    if (actor.isBuilding)
+                        buildingEconomy.SetBuildingNextReadyTime(actor.building.x, actor.building.y, nextNode++);
+                    else
+                    {
+                        actor.unit.nextReadyTime = nextNode++;
+                        actor.unit.zeroCostActedAtTime = -1f;
+                    }
+                    assigned.Add(actor);
                     assignedAny = true;
                     break;
                 }
             }
-        }
-        while (assignedAny);
+        } while (assignedAny);
     }
 
     // The unit being rescheduled is excluded from the collision test. Any other unit
@@ -1505,14 +1530,17 @@ public class HexUnitDemo : MonoBehaviour
         bool occupied;
         do
         {
-            occupied = false;
-            foreach (UnitInfo other in units)
+            occupied = buildingEconomy != null && buildingEconomy.IsBuildingActionNodeOccupied(candidate);
+            if (!occupied)
             {
-                if (other == null || other == unit || other.carrier != null || other.isSkinChest) continue;
-                if (Mathf.Abs(other.nextReadyTime - candidate) < 0.001f)
+                foreach (UnitInfo other in units)
                 {
-                    occupied = true;
-                    break;
+                    if (other == null || other == unit || other.carrier != null || other.isSkinChest) continue;
+                    if (Mathf.Abs(other.nextReadyTime - candidate) < 0.001f)
+                    {
+                        occupied = true;
+                        break;
+                    }
                 }
             }
             if (occupied) candidate++;
@@ -1828,7 +1856,7 @@ public class HexUnitDemo : MonoBehaviour
         ClearHighlights();
 
         statusMessage = $"本次行动结束：移动与行动合计消耗 {totalCost} AP；下次可行动时间为 AP {nextActionNode:0}。";
-        if (!gameplayPaused && !battleEnded && !HasReadyBlueUnit())
+        if (!gameplayPaused && !battleEnded && !HasReadyPlayerActor())
             StartCoroutine(RunSimulationUntilPlayerCanAct());
     }
 
@@ -1842,11 +1870,31 @@ public class HexUnitDemo : MonoBehaviour
         statusMessage = "敌方正在计算行动顺序……";
 
         int safety = 0;
-        while (!gameplayPaused && !battleEnded && !HasReadyBlueUnit() && safety++ < 300)
+        while (!gameplayPaused && !battleEnded && !HasReadyPlayerActor() && safety++ < 600)
         {
             UnitInfo readyEnemy = null;
             foreach (UnitInfo unit in units)
-                if (unit.team == 1 && !unit.isSkinChest && unit.carrier == null && IsUnitReady(unit)) { readyEnemy = unit; break; }
+                if (unit.team == 1 && !unit.isSkinChest && unit.carrier == null && IsUnitReady(unit))
+                { readyEnemy = unit; break; }
+
+            if (readyEnemy == null && buildingEconomy != null)
+            {
+                bool processedEnemyBuilding = false;
+                foreach (Vector2Int coordinate in buildingEconomy.GetQueuedBuildingCoordinates())
+                {
+                    if (!buildingEconomy.TryGetBuildingAt(coordinate.x, coordinate.y,
+                        out string buildingName, out int owner, out HexBuildingType buildingType,
+                        out float buildingReadyTime) || owner != 1 || buildingReadyTime > battleTimeAP + 0.001f)
+                        continue;
+                    int waitAP = buildingType == HexBuildingType.Headquarters ? 500 : 100;
+                    float nextNode = buildingEconomy.ReserveBuildingNextActionNode(
+                        coordinate.x, coordinate.y, battleTimeAP + waitAP, this);
+                    statusMessage = $"敌方{buildingName}自动待机 {waitAP} AP，下次行动 AP {nextNode:0}。";
+                    processedEnemyBuilding = true;
+                    break;
+                }
+                if (processedEnemyBuilding) continue;
+            }
 
             if (readyEnemy != null)
             {
@@ -1862,26 +1910,37 @@ public class HexUnitDemo : MonoBehaviour
                 if (unit.carrier == null && unit.nextReadyTime > battleTimeAP + 0.001f && unit.nextReadyTime < nextTime)
                     nextTime = unit.nextReadyTime;
 
+            if (buildingEconomy != null)
+            {
+                foreach (Vector2Int coordinate in buildingEconomy.GetQueuedBuildingCoordinates())
+                {
+                    if (!buildingEconomy.TryGetBuildingAt(coordinate.x, coordinate.y,
+                        out string buildingName, out int owner, out HexBuildingType type,
+                        out float buildingReadyTime)) continue;
+                    if (owner >= 0 && buildingReadyTime > battleTimeAP + 0.001f && buildingReadyTime < nextTime)
+                        nextTime = buildingReadyTime;
+                }
+            }
+
             if (float.IsInfinity(nextTime))
             {
                 statusMessage = "没有未来 AP 事件。请检查是否所有单位都执行了零 AP 休整。";
                 break;
             }
 
-            // Discrete event jump: never based on Time.deltaTime.
             float previousAP = battleTimeAP;
             battleTimeAP = nextTime;
             if (buildingEconomy != null) buildingEconomy.AdvanceAP(previousAP, battleTimeAP, this);
             if (gameplayPaused || battleEnded) break;
         }
 
-        if (safety >= 300) Debug.LogWarning("Simulation safety limit reached.");
+        if (safety >= 600) Debug.LogWarning("Simulation safety limit reached.");
         simulationRunning = false;
         if (!gameplayPaused && !battleEnded)
         {
             selectedUnit = null;
-            statusMessage = HasReadyBlueUnit()
-                ? "战场时间已推进；现在有我方单位可以行动。"
+            statusMessage = HasReadyPlayerActor()
+                ? "战场时间已推进；现在有我方单位或建筑可以行动。"
                 : statusMessage;
         }
     }
@@ -2071,6 +2130,54 @@ public class HexUnitDemo : MonoBehaviour
         return false;
     }
 
+    private bool HasReadyPlayerActor()
+    {
+        return HasReadyBlueUnit() ||
+            (buildingEconomy != null && buildingEconomy.HasReadyBuilding(0, battleTimeAP));
+    }
+
+    public bool IsUnitActionNodeOccupied(float candidate)
+    {
+        foreach (UnitInfo unit in units)
+            if (unit != null && unit.carrier == null && !unit.isSkinChest &&
+                Mathf.Abs(unit.nextReadyTime - candidate) < 0.001f)
+                return true;
+        return false;
+    }
+
+    private void SelectReadyPlayerBuildingIfNeeded()
+    {
+        if (gameplayPaused || battleEnded || simulationRunning || HasReadyBlueUnit() ||
+            buildingEconomy == null || !buildingEconomy.HasReadyBuilding(0, battleTimeAP))
+            return;
+        if (IsBuildingSelected()) return;
+
+        Vector2Int best = new Vector2Int(-1, -1);
+        float bestTime = float.PositiveInfinity;
+        foreach (Vector2Int coordinate in buildingEconomy.GetQueuedBuildingCoordinates())
+        {
+            if (!buildingEconomy.TryGetBuildingAt(coordinate.x, coordinate.y,
+                out string name, out int owner, out HexBuildingType type, out float nextReady)) continue;
+            if (owner != 0 || nextReady > battleTimeAP + 0.001f) continue;
+            if (nextReady < bestTime)
+            {
+                bestTime = nextReady;
+                best = coordinate;
+            }
+        }
+        if (best.x >= 0)
+        {
+            selectedBuildingQ = best.x;
+            selectedBuildingR = best.y;
+            selectedTileQ = best.x;
+            selectedTileR = best.y;
+            hasSelectedTile = true;
+            selectedUnit = null;
+            actionMenuScreenPosition = new Vector2(Screen.width * 0.62f, Screen.height * 0.42f);
+            statusMessage = "我方建筑行动节点已就绪，请下达建筑命令。";
+        }
+    }
+
     private UnitInfo FindUnitAt(int q, int r)
     {
         foreach (UnitInfo unit in units)
@@ -2152,7 +2259,7 @@ public class HexUnitDemo : MonoBehaviour
         if (!string.IsNullOrEmpty(statusMessage))
             GUILayout.Label(statusMessage);
         if (GUILayout.Button("局内菜单（Esc）") && gameFlowController != null) gameFlowController.OpenPauseMenuFromHUD();
-        if (!gameplayPaused && !battleEnded && !simulationRunning && !HasReadyBlueUnit() &&
+        if (!gameplayPaused && !battleEnded && !simulationRunning && !HasReadyPlayerActor() &&
             GUILayout.Button("推进战场时间 / 执行敌方行动")) StartCoroutine(RunSimulationUntilPlayerCanAct());
         GUILayout.EndArea();
     }
