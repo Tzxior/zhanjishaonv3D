@@ -58,6 +58,9 @@ public class HexUnitDemo : MonoBehaviour
     {
         public string id = "";
         public string description = "";
+        public bool rangeConfigured;
+        [Min(0)] public int minRange;
+        [Min(0)] public int maxRange;
     }
 
     [Header("Individual Unit Profiles (array order matches starting positions)")]
@@ -99,6 +102,7 @@ public class HexUnitDemo : MonoBehaviour
 
     [Header("Simulation UI")]
     public bool showBattleHUD = true;
+    public bool victoryWhenAllHostileUnitsDefeated = true;
 
     private static readonly string[] Directions = { "down_right", "down_left", "up_left", "up_right" };
     private static readonly Vector2Int[] Neighbors =
@@ -206,6 +210,14 @@ public class HexUnitDemo : MonoBehaviour
     private Vector2 actionMenuScreenPosition = new Vector2(420f, 100f);
     private Vector2 actionMenuScrollPosition;
     private Vector2 unitInfoScrollPosition;
+    private Vector2 tileInfoScrollPosition;
+    private bool actionMenuHiddenForTargetSelection;
+    private int selectedAttackMinRange = 1;
+    private int selectedAttackMaxRange = 1;
+    private bool leftPointerPressed, leftPointerStartedOverHud, leftPointerDragged;
+    private Vector2 leftPointerStart, lastLeftPointerPosition;
+    private bool rightPointerPressed, rightPointerStartedOverHud, rightPointerDragged;
+    private Vector2 rightPointerStart, lastRightPointerPosition;
 
     private void Start()
     {
@@ -542,10 +554,79 @@ public class HexUnitDemo : MonoBehaviour
     {
         AnimateUnits();
         UpdateUnitVisibility();
-        if (gameplayPaused || battleEnded) return;
-        if (WasRightClickPressed()) { DeselectAll(); return; }
-        if (!simulationRunning && WasLeftClickPressed() && !PointerOverHud())
-            HandleMapClick();
+
+        if (!gameplayPaused && !battleEnded && WasEscapePressed())
+        {
+            if (actionMenuHiddenForTargetSelection) CancelTargetSelection();
+            else DeselectAll();
+            return;
+        }
+
+        HandlePointerGestures(!gameplayPaused && !battleEnded && !simulationRunning);
+    }
+
+    private void HandlePointerGestures(bool allowMapClicks)
+    {
+        Vector2 pointer = GetPointerPosition();
+        if (WasLeftClickPressed())
+        {
+            leftPointerPressed = true;
+            leftPointerStart = pointer;
+            lastLeftPointerPosition = pointer;
+            leftPointerDragged = false;
+            leftPointerStartedOverHud = PointerOverHud();
+        }
+        if (leftPointerPressed && IsLeftButtonHeld())
+        {
+            if (!leftPointerStartedOverHud && (pointer - leftPointerStart).sqrMagnitude >= 36f)
+                leftPointerDragged = true;
+            if (leftPointerDragged && battlefield != null)
+                battlefield.PanCameraByPixels(pointer - lastLeftPointerPosition);
+            lastLeftPointerPosition = pointer;
+        }
+        if (WasLeftClickReleased())
+        {
+            if (leftPointerPressed && !leftPointerDragged && !leftPointerStartedOverHud &&
+                allowMapClicks && !PointerOverHud())
+                HandleMapClick();
+            leftPointerPressed = leftPointerDragged = leftPointerStartedOverHud = false;
+        }
+
+        if (WasRightClickPressed())
+        {
+            rightPointerPressed = true;
+            rightPointerStart = pointer;
+            lastRightPointerPosition = pointer;
+            rightPointerDragged = false;
+            rightPointerStartedOverHud = PointerOverHud();
+        }
+        if (rightPointerPressed && IsRightButtonHeld())
+        {
+            if (!rightPointerStartedOverHud && (pointer - rightPointerStart).sqrMagnitude >= 36f)
+                rightPointerDragged = true;
+            if (rightPointerDragged && battlefield != null)
+                battlefield.RotateCameraByPixels(pointer - lastRightPointerPosition);
+            lastRightPointerPosition = pointer;
+        }
+        if (WasRightClickReleased())
+        {
+            if (rightPointerPressed && !rightPointerDragged && !rightPointerStartedOverHud &&
+                allowMapClicks && !PointerOverHud())
+            {
+                if (actionMenuHiddenForTargetSelection) CancelTargetSelection();
+                else DeselectAll();
+            }
+            rightPointerPressed = rightPointerDragged = rightPointerStartedOverHud = false;
+        }
+    }
+
+    private bool WasEscapePressed()
+    {
+#if ENABLE_INPUT_SYSTEM
+        return Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame;
+#else
+        return Input.GetKeyDown(KeyCode.Escape);
+#endif
     }
 
     private void UpdateUnitVisibility()
@@ -613,13 +694,44 @@ public class HexUnitDemo : MonoBehaviour
         return Input.GetMouseButtonDown(0);
 #endif
     }
-
+    private bool IsLeftButtonHeld()
+    {
+#if ENABLE_INPUT_SYSTEM
+        return Mouse.current != null && Mouse.current.leftButton.isPressed;
+#else
+        return Input.GetMouseButton(0);
+#endif
+    }
+    private bool WasLeftClickReleased()
+    {
+#if ENABLE_INPUT_SYSTEM
+        return Mouse.current != null && Mouse.current.leftButton.wasReleasedThisFrame;
+#else
+        return Input.GetMouseButtonUp(0);
+#endif
+    }
     private bool WasRightClickPressed()
     {
 #if ENABLE_INPUT_SYSTEM
         return Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame;
 #else
         return Input.GetMouseButtonDown(1);
+#endif
+    }
+    private bool IsRightButtonHeld()
+    {
+#if ENABLE_INPUT_SYSTEM
+        return Mouse.current != null && Mouse.current.rightButton.isPressed;
+#else
+        return Input.GetMouseButton(1);
+#endif
+    }
+    private bool WasRightClickReleased()
+    {
+#if ENABLE_INPUT_SYSTEM
+        return Mouse.current != null && Mouse.current.rightButton.wasReleasedThisFrame;
+#else
+        return Input.GetMouseButtonUp(1);
 #endif
     }
 
@@ -666,7 +778,8 @@ public class HexUnitDemo : MonoBehaviour
 
     private bool IsActionMenuVisible()
     {
-        return selectedUnit != null && selectedUnit.team == 0 && !simulationRunning && showBattleHUD;
+        return selectedUnit != null && selectedUnit.team == 0 && !simulationRunning &&
+               showBattleHUD && !actionMenuHiddenForTargetSelection;
     }
 
     private Rect GetActionMenuRect()
@@ -732,7 +845,7 @@ public class HexUnitDemo : MonoBehaviour
                 int routeAP=currentPaths[target].cost,routeMove=currentPaths[target].movementPoints;
                 MoveUnitAlongPath(selectedUnit,path);
                 selectedUnit.pendingMoveAP+=routeAP;selectedUnit.hasMovedThisActivation=true;
-                moveMode=false;attackMode=false;ClearHighlights();
+                moveMode=false;attackMode=false;actionMenuHiddenForTargetSelection=false;ClearHighlights();
                 statusMessage=$"移动完成：消耗 {routeMove} 移动力、暂记 {routeAP} AP；移动不结束行动，请继续选择非移动行动。";return;
             }
             statusMessage="已选中地块。移动是可选行动；本次行动仍需以攻击、占领或休整结束。";return;
@@ -742,9 +855,32 @@ public class HexUnitDemo : MonoBehaviour
 
     private void DeselectAll()
     {
-        if(selectedUnit!=null&&selectedUnit.visual!=null)selectedUnit.visual.localScale=selectedUnit.baseScale;
-        selectedUnit=null;hasSelectedTile=false;moveMode=false;attackMode=false;supportMode=false;supportAction="";transportMode=false;actionMenuScrollPosition=Vector2.zero;ClearHighlights();
-        statusMessage="已取消选择单位和地块。";
+        if (selectedUnit != null && selectedUnit.visual != null)
+            selectedUnit.visual.localScale = selectedUnit.baseScale;
+        selectedUnit = null;
+        hasSelectedTile = false;
+        moveMode = attackMode = supportMode = transportMode = false;
+        supportAction = "";
+        actionMenuHiddenForTargetSelection = false;
+        actionMenuScrollPosition = Vector2.zero;
+        ClearHighlights();
+        statusMessage = "已取消选择单位和地块。";
+    }
+
+    private void CancelTargetSelection()
+    {
+        attackMode = supportMode = transportMode = false;
+        supportAction = "";
+        actionMenuHiddenForTargetSelection = false;
+        ClearHighlights();
+        if (selectedUnit != null && selectedUnit.team == 0 && IsUnitReady(selectedUnit) &&
+            !selectedUnit.hasMovedThisActivation)
+        {
+            moveMode = true;
+            RefreshMovementHighlights();
+        }
+        else moveMode = false;
+        statusMessage = "已取消当前行动的目标选择；单位仍保持选中。";
     }
 
     private void SpawnStartingUnits(Vector2Int[] positions, UnitBattleProfile[] fallbackProfiles, string[] profileIds, int team, Dictionary<string, Sprite[]> animations)
@@ -796,11 +932,16 @@ public class HexUnitDemo : MonoBehaviour
         selectedUnit = unit;
         actionMenuScreenPosition = GetPointerGuiPosition();
         actionMenuScrollPosition = Vector2.zero;
+        actionMenuHiddenForTargetSelection = false;
+        supportMode = false;
+        supportAction = "";
+        transportMode = false;
         if (unit.visual != null)
             unit.visual.localScale = unit.baseScale * selectedScaleMultiplier;
 
         moveMode = unit.team == 0 && IsUnitReady(unit) && !unit.hasMovedThisActivation && !simulationRunning;
         attackMode = false;
+        ClearHighlights();
         RefreshMovementHighlights();
 
         if (unit.team != 0)
@@ -817,7 +958,11 @@ public class HexUnitDemo : MonoBehaviour
     {
         reachableTiles.Clear();
         currentPaths.Clear();
-        battlefield.SetMovementHighlights(null);
+        if (battlefield != null)
+        {
+            battlefield.SetMovementHighlights(null);
+            battlefield.SetActionHighlights(null);
+        }
     }
 
     private void RefreshMovementHighlights()
@@ -1034,25 +1179,91 @@ public class HexUnitDemo : MonoBehaviour
     private void BeginAttackMode()
     {
         if (selectedUnit == null || selectedUnit.team != 0 || !IsUnitReady(selectedUnit)) return;
-        BeginConfiguredAttack("常规攻击",1f,selectedUnit.attackType,selectedUnit.attackAP);
+        BeginConfiguredAttack("常规攻击", 1f, selectedUnit.attackType, selectedUnit.attackAP,
+            false, false, false, 1, Mathf.Max(1, selectedUnit.attackRange));
     }
 
-    private void BeginConfiguredAttack(string name,float multiplier,HexAttackType type,int cost,bool navalOnly=false,bool trueDamage=false,bool airOnly=false)
+    private void GetConfiguredActionRange(int actionIndex, int fallbackMin, int fallbackMax,
+        out int minRange, out int maxRange)
     {
-        if(selectedUnit==null || selectedUnit.team!=0 || !IsUnitReady(selectedUnit)) return;
-        if(selectedUnit.unitId=="fortress" && !selectedUnit.fortressGarrisoned) { statusMessage="要塞处于机动形态，不能攻击。"; return; }
-        if(selectedUnit.ammoCapacity>0 && selectedUnit.currentAmmo<=0) { statusMessage="弹药不足。"; return; }
-        moveMode=false; attackMode=true; supportAction=""; transportMode=false;
-        selectedAttackName=name; selectedAttackMultiplier=multiplier; selectedAttackType=type; selectedAttackCost=cost;
-        selectedAttackNavalOnly=navalOnly; selectedAttackTrueDamage=trueDamage; selectedAttackAirOnly=airOnly;
-        ClearHighlights(); statusMessage=$"{name}模式：点击攻击范围内的合法目标。";
+        minRange = Mathf.Max(0, fallbackMin);
+        maxRange = Mathf.Max(minRange, fallbackMax);
+        if (selectedUnit == null || selectedUnit.actions == null ||
+            actionIndex < 0 || actionIndex >= selectedUnit.actions.Length) return;
+        UnitActionProfile action = selectedUnit.actions[actionIndex];
+        if (action == null || !action.rangeConfigured) return;
+        minRange = Mathf.Max(0, action.minRange);
+        maxRange = Mathf.Max(minRange, action.maxRange);
+    }
+
+    private string ConfiguredRangeLabel(int actionIndex, int fallbackMin = 1, int fallbackMax = 1)
+    {
+        GetConfiguredActionRange(actionIndex, fallbackMin, fallbackMax, out int minRange, out int maxRange);
+        return $"{minRange}-{maxRange}";
+    }
+
+    private void BeginProfiledAttack(int actionIndex, string name, float multiplier, HexAttackType type, int cost,
+        bool navalOnly = false, bool trueDamage = false, bool airOnly = false,
+        int fallbackMinRange = 1, int fallbackMaxRange = 1)
+    {
+        GetConfiguredActionRange(actionIndex, fallbackMinRange, fallbackMaxRange, out int minRange, out int maxRange);
+        BeginConfiguredAttack(name, multiplier, type, cost, navalOnly, trueDamage, airOnly, minRange, maxRange);
+    }
+
+    private void HighlightAttackTargets()
+    {
+        var targets = new List<Vector2Int>();
+        if (selectedUnit != null)
+        {
+            Vector2Int origin = new Vector2Int(selectedUnit.q, selectedUnit.r);
+            foreach (UnitInfo target in units)
+            {
+                if (target == null || target.team == selectedUnit.team || target.hp <= 0 ||
+                    target.carrier != null || (target.renderer != null && !target.renderer.enabled)) continue;
+                int distance = HexDistance(origin, new Vector2Int(target.q, target.r));
+                if (distance < selectedAttackMinRange || distance > selectedAttackMaxRange) continue;
+                if (selectedAttackNavalOnly && target.unitClass != HexUnitClass.Naval) continue;
+                if (selectedAttackAirOnly && target.unitClass != HexUnitClass.Air) continue;
+                targets.Add(new Vector2Int(target.q, target.r));
+            }
+        }
+        if (battlefield != null) battlefield.SetActionHighlights(targets);
+    }
+
+    private void BeginConfiguredAttack(string name, float multiplier, HexAttackType type, int cost,
+        bool navalOnly = false, bool trueDamage = false, bool airOnly = false, int minRange = 1, int maxRange = 1)
+    {
+        if (selectedUnit == null || selectedUnit.team != 0 || !IsUnitReady(selectedUnit)) return;
+        if (selectedUnit.unitId == "fortress" && !selectedUnit.fortressGarrisoned)
+        { statusMessage = "要塞处于机动形态，不能攻击。"; return; }
+        if (selectedUnit.ammoCapacity > 0 && selectedUnit.currentAmmo <= 0)
+        { statusMessage = "弹药不足。"; return; }
+        moveMode = false;
+        attackMode = true;
+        supportAction = "";
+        supportMode = false;
+        transportMode = false;
+        selectedAttackName = name;
+        selectedAttackMultiplier = multiplier;
+        selectedAttackType = type;
+        selectedAttackCost = cost;
+        selectedAttackMinRange = Mathf.Max(0, minRange);
+        selectedAttackMaxRange = Mathf.Max(selectedAttackMinRange, maxRange);
+        selectedAttackNavalOnly = navalOnly;
+        selectedAttackTrueDamage = trueDamage;
+        selectedAttackAirOnly = airOnly;
+        actionMenuHiddenForTargetSelection = true;
+        ClearHighlights();
+        HighlightAttackTargets();
+        statusMessage = $"{name}模式：射程 {selectedAttackMinRange}-{selectedAttackMaxRange}；点击橙色高亮目标，Esc 或右键取消。";
     }
 
     private void ExecutePlayerAttack(UnitInfo target)
     {
         if (selectedUnit == null || selectedUnit.team != 0 || !IsUnitReady(selectedUnit)) return;
         int distance = HexDistance(new Vector2Int(selectedUnit.q, selectedUnit.r), new Vector2Int(target.q, target.r));
-        if(distance>selectedUnit.attackRange) { statusMessage=$"目标超出攻击范围（当前距离 {distance} 格）。"; return; }
+        if (distance < selectedAttackMinRange || distance > selectedAttackMaxRange)
+        { statusMessage = $"目标超出{selectedAttackName}的射程（当前距离 {distance} 格，要求 {selectedAttackMinRange}-{selectedAttackMaxRange}）。"; return; }
         if(selectedAttackNavalOnly && target.unitClass!=HexUnitClass.Naval) { statusMessage="该行动只能攻击海军单位。"; return; }
         if(selectedAttackAirOnly && target.unitClass!=HexUnitClass.Air) { statusMessage="该行动只能攻击空军单位。"; return; }
         if(selectedUnit.ammoCapacity>0 && selectedUnit.currentAmmo<=0) { statusMessage="弹药不足。"; return; }
@@ -1132,6 +1343,7 @@ public class HexUnitDemo : MonoBehaviour
         selectedUnit = null;
         moveMode = false;
         attackMode = false;
+        actionMenuHiddenForTargetSelection = false;
         ClearHighlights();
 
         statusMessage = $"本次行动结束：移动与行动合计消耗 {totalCost} AP；下次可行动时间为 AP {nextActionNode:0}。";
@@ -1616,8 +1828,9 @@ public class HexUnitDemo : MonoBehaviour
         {
             moveMode = true;
             attackMode = false;
+            actionMenuHiddenForTargetSelection = true;
             RefreshMovementHighlights();
-            statusMessage = "点击青色地块移动；移动后仍需执行非移动行动。";
+            statusMessage = "行动菜单已隐藏：点击青色地块移动；移动后仍需执行非移动行动。";
         }
         GUI.enabled = ready && menuUnit.attack > 0;
         DrawConfiguredActionButtons(ready);
@@ -1638,7 +1851,21 @@ public class HexUnitDemo : MonoBehaviour
             supportAction = "";
             supportMode = false;
             attackMode = false;
-            statusMessage = transportMode ? "运输模式：点击相邻友军装载，或点击相邻空地卸载。" : "已退出运输模式。";
+            ClearHighlights();
+            if (transportMode)
+            {
+                moveMode = false;
+                actionMenuHiddenForTargetSelection = true;
+                HighlightTransportTargets();
+                statusMessage = "运输模式：行动菜单已隐藏；点击橙色高亮目标装载或卸载，Esc 或右键取消。";
+            }
+            else
+            {
+                actionMenuHiddenForTargetSelection = false;
+                moveMode = !menuUnit.hasMovedThisActivation;
+                if (moveMode) RefreshMovementHighlights();
+                statusMessage = "已退出运输模式。";
+            }
         }
         DrawSupportButtons(ready);
         if (selectedUnit != menuUnit) return;
@@ -1684,29 +1911,101 @@ public class HexUnitDemo : MonoBehaviour
 
     private void DrawConfiguredActionButtons(bool ready)
     {
-        GUI.enabled=ready&&!transportMode&&string.IsNullOrEmpty(supportAction);
-        switch(selectedUnit.unitId)
+        GUI.enabled = ready && !transportMode && string.IsNullOrEmpty(supportAction);
+        switch (selectedUnit.unitId)
         {
-            case "infantry": if(GUILayout.Button("步枪（50 AP）")) BeginConfiguredAttack("步枪",1,HexAttackType.Bullet,50); if(GUILayout.Button("手雷（150%爆炸，50 AP）")) BeginConfiguredAttack("手雷",1.5f,HexAttackType.Explosion,50); break;
-            case "heavy_infantry": if(GUILayout.Button("机枪（60 AP）")) BeginConfiguredAttack("机枪",1,HexAttackType.Bullet,60); if(GUILayout.Button("集束手雷（200%，60 AP）")) BeginConfiguredAttack("集束手雷",2,HexAttackType.Explosion,60); break;
-            case "engineer": if(GUILayout.Button("步枪（40 AP）")) BeginConfiguredAttack("步枪",1,HexAttackType.Bullet,40); break;
-            case "sniper": if(GUILayout.Button("狙击（80 AP）")) BeginConfiguredAttack("狙击",1,HexAttackType.Bullet,80); break;
-            case "spy": if(GUILayout.Button("刺杀（真实伤害；临时按100 AP）")) BeginConfiguredAttack("刺杀",1,HexAttackType.Bullet,100,false,true); break;
-            case "scout": case "apc": case "transport_aircraft": case "transport_ship": if(GUILayout.Button("机枪/机炮（50 AP）")) BeginConfiguredAttack("机枪/机炮",1,HexAttackType.Bullet,50); break;
-            case "tank": case "heavy_tank": case "self_propelled_gun": case "rockets": case "battleship": case "bomber":
-                if(GUILayout.Button("主武器攻击（80 AP）")) BeginConfiguredAttack("主武器攻击",1,HexAttackType.Explosion,80); break;
-            case "sub": if(GUILayout.Button("鱼雷（仅海军，80 AP）")) BeginConfiguredAttack("鱼雷",1,HexAttackType.Explosion,80,true); break;
-            case "anti_air": if(GUILayout.Button("防空炮（仅空军，80 AP）")) BeginConfiguredAttack("防空炮",1,HexAttackType.Bullet,80,false,false,true); break;
-            case "fortress": if(GUILayout.Button("驻守炮击（80 AP）")) BeginConfiguredAttack("驻守炮击",1,HexAttackType.Explosion,80); break;
-            case "fighter": if(GUILayout.Button("机枪（50%，50 AP）")) BeginConfiguredAttack("机枪",0.5f,HexAttackType.Bullet,50); if(GUILayout.Button("空袭（80 AP）")) BeginConfiguredAttack("空袭",1,HexAttackType.Explosion,80); break;
-            case "torpedo_plane": if(GUILayout.Button("鱼雷攻击（仅海军，80 AP）")) BeginConfiguredAttack("鱼雷攻击",1,HexAttackType.Explosion,80,true); break;
-            case "destroyer": if(GUILayout.Button("舰炮（50%，50 AP）")) BeginConfiguredAttack("舰炮",0.5f,HexAttackType.Bullet,50); if(GUILayout.Button("鱼雷（80 AP）")) BeginConfiguredAttack("鱼雷",1,HexAttackType.Explosion,80); break;
-            case "cruiser": if(GUILayout.Button("舰炮（50%，50 AP）")) BeginConfiguredAttack("舰炮",0.5f,HexAttackType.Bullet,50); if(GUILayout.Button("鱼雷/重炮（80 AP）")) BeginConfiguredAttack("鱼雷/重炮",1,HexAttackType.Explosion,80); break;
+            case "infantry":
+                if (GUILayout.Button($"步枪（50 AP；射程 {ConfiguredRangeLabel(0)}）")) BeginProfiledAttack(0, "步枪", 1f, HexAttackType.Bullet, 50);
+                if (GUILayout.Button($"手雷（150%爆炸，50 AP；射程 {ConfiguredRangeLabel(1)}）")) BeginProfiledAttack(1, "手雷", 1.5f, HexAttackType.Explosion, 50);
+                break;
+            case "heavy_infantry":
+                if (GUILayout.Button($"机枪（60 AP；射程 {ConfiguredRangeLabel(0)}）")) BeginProfiledAttack(0, "机枪", 1f, HexAttackType.Bullet, 60);
+                if (GUILayout.Button($"集束手雷（200%，60 AP；射程 {ConfiguredRangeLabel(1)}）")) BeginProfiledAttack(1, "集束手雷", 2f, HexAttackType.Explosion, 60);
+                break;
+            case "engineer":
+                if (GUILayout.Button($"步枪（40 AP；射程 {ConfiguredRangeLabel(0)}）")) BeginProfiledAttack(0, "步枪", 1f, HexAttackType.Bullet, 40);
+                break;
+            case "sniper":
+                if (GUILayout.Button($"狙击（80 AP；射程 {ConfiguredRangeLabel(0)}）")) BeginProfiledAttack(0, "狙击", 1f, HexAttackType.Bullet, 80);
+                break;
+            case "spy":
+                if (GUILayout.Button($"刺杀（真实伤害；100 AP；射程 {ConfiguredRangeLabel(0)}）")) BeginProfiledAttack(0, "刺杀", 1f, HexAttackType.Bullet, 100, false, true);
+                break;
+            case "scout":
+            case "apc":
+            case "transport_aircraft":
+            case "transport_ship":
+                if (GUILayout.Button($"机枪/机炮（50 AP；射程 {ConfiguredRangeLabel(0)}）")) BeginProfiledAttack(0, "机枪/机炮", 1f, HexAttackType.Bullet, 50);
+                break;
+            case "tank":
+            case "heavy_tank":
+            case "self_propelled_gun":
+            case "rockets":
+            case "battleship":
+            case "bomber":
+                if (GUILayout.Button($"主武器攻击（80 AP；射程 {ConfiguredRangeLabel(0)}）")) BeginProfiledAttack(0, "主武器攻击", 1f, HexAttackType.Explosion, 80);
+                break;
+            case "sub":
+                if (GUILayout.Button($"鱼雷（仅海军，80 AP；射程 {ConfiguredRangeLabel(0)}）")) BeginProfiledAttack(0, "鱼雷", 1f, HexAttackType.Explosion, 80, true);
+                break;
+            case "anti_air":
+                if (GUILayout.Button($"防空炮（仅空军，80 AP；射程 {ConfiguredRangeLabel(0)}）")) BeginProfiledAttack(0, "防空炮", 1f, HexAttackType.Bullet, 80, false, false, true);
+                break;
+            case "fortress":
+                if (GUILayout.Button($"驻守炮击（80 AP；射程 {ConfiguredRangeLabel(0)}）")) BeginProfiledAttack(0, "驻守炮击", 1f, HexAttackType.Explosion, 80);
+                break;
+            case "fighter":
+                if (GUILayout.Button($"机枪（50%，50 AP；射程 {ConfiguredRangeLabel(0)}）")) BeginProfiledAttack(0, "机枪", 0.5f, HexAttackType.Bullet, 50);
+                if (GUILayout.Button($"空袭（80 AP；射程 {ConfiguredRangeLabel(1)}）")) BeginProfiledAttack(1, "空袭", 1f, HexAttackType.Explosion, 80);
+                break;
+            case "torpedo_plane":
+                if (GUILayout.Button($"鱼雷攻击（仅海军，80 AP；射程 {ConfiguredRangeLabel(0)}）")) BeginProfiledAttack(0, "鱼雷攻击", 1f, HexAttackType.Explosion, 80, true);
+                break;
+            case "destroyer":
+                if (GUILayout.Button($"舰炮（50%，50 AP；射程 {ConfiguredRangeLabel(0)}）")) BeginProfiledAttack(0, "舰炮", 0.5f, HexAttackType.Bullet, 50);
+                if (GUILayout.Button($"鱼雷（80 AP；射程 {ConfiguredRangeLabel(1)}）")) BeginProfiledAttack(1, "鱼雷", 1f, HexAttackType.Explosion, 80);
+                break;
+            case "cruiser":
+                if (GUILayout.Button($"舰炮（50%，50 AP；射程 {ConfiguredRangeLabel(0)}）")) BeginProfiledAttack(0, "舰炮", 0.5f, HexAttackType.Bullet, 50);
+                if (GUILayout.Button($"鱼雷/重炮（80 AP；射程 {ConfiguredRangeLabel(1)}）")) BeginProfiledAttack(1, "鱼雷/重炮", 1f, HexAttackType.Explosion, 80);
+                break;
         }
-        GUI.enabled=true;
+        GUI.enabled = true;
     }
 
     private bool CanUnitTransport(UnitInfo u) => u!=null && u.resourceCapacity>0 && (u.unitId=="apc"||u.unitId=="transport_aircraft"||u.unitId=="transport_ship");
+
+    private void HighlightTransportTargets()
+    {
+        var targets = new List<Vector2Int>();
+        if (selectedUnit == null) return;
+        Vector2Int origin = new Vector2Int(selectedUnit.q, selectedUnit.r);
+
+        if (selectedUnit.cargo.Count > 0)
+        {
+            UnitInfo passenger = selectedUnit.cargo[0];
+            foreach (Vector2Int offset in Neighbors)
+            {
+                Vector2Int candidate = origin + offset;
+                if (battlefield.IsInsideMap(candidate.x, candidate.y) &&
+                    FindUnitAt(candidate.x, candidate.y) == null &&
+                    battlefield.IsTileWalkable(candidate.x, candidate.y, passenger.unitClass))
+                    targets.Add(candidate);
+            }
+        }
+        else
+        {
+            foreach (UnitInfo unit in units)
+            {
+                if (unit == null || unit == selectedUnit || unit.team != selectedUnit.team ||
+                    unit.carrier != null || unit.unitClass == HexUnitClass.Air ||
+                    unit.unitClass == HexUnitClass.Naval) continue;
+                if (HexDistance(origin, new Vector2Int(unit.q, unit.r)) <= 1)
+                    targets.Add(new Vector2Int(unit.q, unit.r));
+            }
+        }
+        if (battlefield != null) battlefield.SetActionHighlights(targets);
+    }
 
     private void DrawSupportButtons(bool ready)
     {
@@ -1717,7 +2016,30 @@ public class HexUnitDemo : MonoBehaviour
         { if(selectedUnit.currentFuel>=5&&GUILayout.Button("补给燃料 +5（80 AP）")) BeginSupportMode("fuel"); if(selectedUnit.currentAmmo>=2&&GUILayout.Button("补给弹药 +2（80 AP）")) BeginSupportMode("ammo"); }
         if((selectedUnit.unitId=="refuel_aircraft"||selectedUnit.unitId=="aircraft_carrier")&&selectedUnit.currentFuel>=5&&GUILayout.Button("加油 +5（80 AP）")) BeginSupportMode("fuel");
     }
-    private void BeginSupportMode(string action) { supportAction=action; supportMode=true; attackMode=false; transportMode=false; moveMode=false; ClearHighlights(); statusMessage="支援模式："+action+"。点击相邻友军。"; }
+    private void BeginSupportMode(string action)
+    {
+        supportAction = action;
+        supportMode = true;
+        attackMode = false;
+        transportMode = false;
+        moveMode = false;
+        actionMenuHiddenForTargetSelection = true;
+        ClearHighlights();
+        var targets = new List<Vector2Int>();
+        if (selectedUnit != null)
+        {
+            foreach (UnitInfo unit in units)
+            {
+                if (unit == null || unit == selectedUnit || unit.team != selectedUnit.team || unit.carrier != null)
+                    continue;
+                if (HexDistance(new Vector2Int(selectedUnit.q, selectedUnit.r),
+                    new Vector2Int(unit.q, unit.r)) <= 1)
+                    targets.Add(new Vector2Int(unit.q, unit.r));
+            }
+        }
+        if (battlefield != null) battlefield.SetActionHighlights(targets);
+        statusMessage = "支援模式：" + action + "。行动菜单已隐藏；点击橙色高亮友军，Esc 或右键取消。";
+    }
     private void ExecuteSupportAction(UnitInfo target)
     {
         if(selectedUnit==null||target==null||target.team!=selectedUnit.team||HexDistance(new Vector2Int(selectedUnit.q,selectedUnit.r),new Vector2Int(target.q,target.r))>1) { statusMessage="支援目标必须是相邻友军。"; return; }
