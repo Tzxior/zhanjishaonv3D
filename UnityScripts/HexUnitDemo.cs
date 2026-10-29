@@ -363,6 +363,88 @@ public class HexUnitDemo : MonoBehaviour
         });
     }
 
+    public void ApplyBuildingRestorationAt(int q, int r, int ownerTeam, HexBuildingType type)
+    {
+        foreach (UnitInfo unit in units)
+        {
+            if (unit == null || unit.carrier != null || unit.q != q || unit.r != r || unit.team != ownerTeam)
+                continue;
+            bool ground = unit.unitClass == HexUnitClass.Infantry || unit.unitClass == HexUnitClass.HeavyGround;
+            bool factoryMatch =
+                (type == HexBuildingType.Arsenal && unit.unitCategory == "infantry") ||
+                (type == HexBuildingType.TankFactory && unit.unitCategory == "ground_vehicle") ||
+                (type == HexBuildingType.ArtilleryFactory && unit.unitCategory == "artillery") ||
+                (type == HexBuildingType.Shipyard && unit.unitCategory == "naval") ||
+                (type == HexBuildingType.Airport && unit.unitCategory == "air");
+
+            if (type == HexBuildingType.Headquarters && ground)
+            {
+                unit.hp = Mathf.Min(unit.maxHp, unit.hp + 10);
+                if (unit.ammoCapacity > 0) unit.currentAmmo = Mathf.Min(unit.ammoCapacity, unit.currentAmmo + 1);
+                if (unit.fuelCapacity > 0) unit.currentFuel = Mathf.Min(unit.fuelCapacity, unit.currentFuel + 2);
+            }
+            else if ((type == HexBuildingType.LargeCity || type == HexBuildingType.SmallCity) && ground)
+            {
+                if (unit.ammoCapacity > 0) unit.currentAmmo = Mathf.Min(unit.ammoCapacity, unit.currentAmmo + 1);
+                if (unit.fuelCapacity > 0) unit.currentFuel = Mathf.Min(unit.fuelCapacity, unit.currentFuel + 2);
+            }
+            else if (type == HexBuildingType.Village && ground)
+            {
+                if (unit.fuelCapacity > 0) unit.currentFuel = Mathf.Min(unit.fuelCapacity, unit.currentFuel + 1);
+            }
+            else if (factoryMatch)
+            {
+                unit.hp = Mathf.Min(unit.maxHp, unit.hp + 10);
+                if (unit.ammoCapacity > 0) unit.currentAmmo = Mathf.Min(unit.ammoCapacity, unit.currentAmmo + 1);
+                if (unit.fuelCapacity > 0) unit.currentFuel = Mathf.Min(unit.fuelCapacity, unit.currentFuel + 2);
+            }
+        }
+    }
+
+    public void OnHeadquartersCaptured(int capturingTeam, int previousOwner)
+    {
+        if (battleEnded || previousOwner == capturingTeam) return;
+        if (previousOwner == 0) EndBattle(false, "我方大本营被敌方占领。");
+        else if (capturingTeam == 0) EndBattle(true, "成功占领敌方大本营。");
+    }
+
+    public void RequestSurrender()
+    {
+        EndBattle(false, "玩家选择投降。");
+    }
+
+    private void EndBattle(bool won, string reason)
+    {
+        if (battleEnded) return;
+        battleEnded = true;
+        gameplayPaused = true;
+        StopAllCoroutines();
+        simulationRunning = false;
+        selectedUnit = null;
+        hasSelectedTile = false;
+        moveMode = attackMode = supportMode = transportMode = false;
+        supportAction = "";
+        if (battlefield != null) battlefield.SetMovementHighlights(null);
+        if (gameFlowController == null) gameFlowController = GetComponent<HexGameFlowController>();
+        if (gameFlowController != null) gameFlowController.ShowResult(won, reason);
+    }
+
+    private void CheckEliminationResult()
+    {
+        if (battleEnded) return;
+        bool playerAlive = false;
+        bool hostileAlive = false;
+        foreach (UnitInfo unit in units)
+        {
+            if (unit == null || unit.isSkinChest || unit.carrier != null || unit.hp <= 0) continue;
+            if (unit.team == 0) playerAlive = true;
+            else hostileAlive = true;
+        }
+        if (!playerAlive) EndBattle(false, "我方所有作战单位均已被击破。");
+        else if (victoryWhenAllHostileUnitsDefeated && !hostileAlive)
+            EndBattle(true, "所有敌方作战单位均已被击破。");
+    }
+
     private void LoadUnitProfileDatabase()
     {
         profilesById.Clear();
