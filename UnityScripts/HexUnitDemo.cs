@@ -187,6 +187,13 @@ public class HexUnitDemo : MonoBehaviour
         public bool isBuilding;
     }
 
+    private sealed class APTimelineEntry
+    {
+        public string name;
+        public float nextReadyTime;
+        public bool isBuilding;
+    }
+
     private class PathNode
     {
         public int cost;
@@ -2346,7 +2353,7 @@ public class HexUnitDemo : MonoBehaviour
         float tickY = rect.y + 25f;
         float trackY = rect.y + 43f;
         float trackHeight = 10f;
-        GUI.Label(new Rect(trackX, titleY, trackWidth * 0.7f, 20f), "我方行动时间轴（未来 500 AP）");
+        GUI.Label(new Rect(trackX, titleY, trackWidth * 0.7f, 20f), "我方行动时间轴（未来 500 AP；含建筑）");
         GUI.Label(new Rect(rect.xMax - 150f, titleY, 138f, 20f), $"当前 AP：{battleTimeAP:0}");
 
         Color originalColor = GUI.color;
@@ -2360,34 +2367,52 @@ public class HexUnitDemo : MonoBehaviour
             GUI.Label(new Rect(Mathf.Clamp(x - 15f, trackX - 4f, trackX + trackWidth - 28f), tickY, 36f, 16f), tick.ToString());
         }
 
-        var visibleUnits = new List<UnitInfo>();
+        var visibleActors = new List<APTimelineEntry>();
         int outsideRangeCount = 0;
         foreach (UnitInfo unit in units)
         {
-            if (unit == null || unit.team != 0 || unit.carrier != null) continue;
+            if (unit == null || unit.team != 0 || unit.carrier != null || unit.isSkinChest) continue;
             float remaining = Mathf.Max(0f, unit.nextReadyTime - battleTimeAP);
-            if (remaining <= 500f + 0.001f) visibleUnits.Add(unit);
-            else outsideRangeCount++;
+            if (remaining <= 500f + 0.001f)
+                visibleActors.Add(new APTimelineEntry { name = unit.unitName, nextReadyTime = unit.nextReadyTime, isBuilding = false });
+            else
+                outsideRangeCount++;
         }
-        visibleUnits.Sort((a, b) => a.nextReadyTime.CompareTo(b.nextReadyTime));
+
+        if (buildingEconomy != null)
+        {
+            foreach (Vector2Int coordinate in buildingEconomy.GetQueuedBuildingCoordinates())
+            {
+                if (!buildingEconomy.TryGetBuildingAt(coordinate.x, coordinate.y,
+                    out string buildingName, out int owner, out HexBuildingType buildingType,
+                    out float nextReadyTime) || owner != 0) continue;
+                float remaining = Mathf.Max(0f, nextReadyTime - battleTimeAP);
+                if (remaining <= 500f + 0.001f)
+                    visibleActors.Add(new APTimelineEntry { name = buildingName + "·建", nextReadyTime = nextReadyTime, isBuilding = true });
+                else
+                    outsideRangeCount++;
+            }
+        }
+        visibleActors.Sort((a, b) => a.nextReadyTime.CompareTo(b.nextReadyTime));
 
         float labelWidth = Mathf.Min(105f, Mathf.Max(72f, trackWidth / 5f));
         const int laneCount = 3;
         float[] laneRight = new float[laneCount];
         for (int i = 0; i < laneCount; i++) laneRight[i] = trackX - labelWidth - 10f;
-        int laneY = 0;
 
-        for (int i = 0; i < visibleUnits.Count; i++)
+        for (int i = 0; i < visibleActors.Count; i++)
         {
-            UnitInfo unit = visibleUnits[i];
-            float remaining = Mathf.Max(0f, unit.nextReadyTime - battleTimeAP);
+            APTimelineEntry actor = visibleActors[i];
+            float remaining = Mathf.Max(0f, actor.nextReadyTime - battleTimeAP);
             float markerX = trackX + trackWidth * Mathf.Clamp01(remaining / 500f);
-            GUI.color = new Color(0.25f, 0.72f, 1f, 1f);
+            GUI.color = actor.isBuilding
+                ? new Color(1f, 0.67f, 0.24f, 1f)
+                : new Color(0.25f, 0.72f, 1f, 1f);
             GUI.DrawTexture(new Rect(markerX - 2f, trackY - 5f, 4f, trackHeight + 10f), Texture2D.whiteTexture);
             GUI.color = originalColor;
 
             float labelX = Mathf.Clamp(markerX - labelWidth * 0.5f, trackX, trackX + trackWidth - labelWidth);
-            laneY = -1;
+            int laneY = -1;
             for (int lane = 0; lane < laneCount; lane++)
             {
                 if (labelX >= laneRight[lane] + 3f) { laneY = lane; break; }
@@ -2395,11 +2420,12 @@ public class HexUnitDemo : MonoBehaviour
             if (laneY < 0) laneY = i % laneCount;
             laneRight[laneY] = labelX + labelWidth;
             float labelY = trackY + 14f + laneY * 18f;
-            GUI.Label(new Rect(labelX, labelY, labelWidth, 18f), $"{unit.unitName} {remaining:0} AP");
+            GUI.Label(new Rect(labelX, labelY, labelWidth, 18f), $"{actor.name} {remaining:0} AP");
         }
 
         if (outsideRangeCount > 0)
-            GUI.Label(new Rect(trackX, rect.yMax - 21f, trackWidth, 18f), $"另有 {outsideRangeCount} 个我方单位的下次行动超出 500 AP 范围");
+            GUI.Label(new Rect(trackX, rect.yMax - 21f, trackWidth, 18f),
+                $"另有 {outsideRangeCount} 个我方行动节点的下次行动超出 500 AP 范围");
         GUI.color = originalColor;
     }
 
