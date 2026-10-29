@@ -395,10 +395,12 @@ public class HexBattlefieldDemo : MonoBehaviour
         if (offset.sqrMagnitude > 0.001f)
         {
             float polarAngle = Vector3.Angle(offset.normalized, Vector3.up);
+            float minimumPitch = Mathf.Clamp(minimumCameraPolarAngle, 30f, 60f);
+            float maximumPitch = Mathf.Clamp(maximumCameraPolarAngle, minimumPitch, 60f);
             float desiredPolarAngle = Mathf.Clamp(
                 polarAngle - pixelDelta.y * cameraRotationSensitivity,
-                Mathf.Min(minimumCameraPolarAngle, maximumCameraPolarAngle),
-                Mathf.Max(minimumCameraPolarAngle, maximumCameraPolarAngle));
+                minimumPitch,
+                maximumPitch);
             float polarDelta = desiredPolarAngle - polarAngle;
             if (Mathf.Abs(polarDelta) > 0.001f)
                 mainCamera.transform.RotateAround(cameraFocus, mainCamera.transform.right, polarDelta);
