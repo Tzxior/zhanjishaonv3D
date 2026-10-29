@@ -359,6 +359,18 @@ public class HexGameFlowController : MonoBehaviour
         SkinDefinition skin = GetSkin(selectedSkinId);
         if (skin == null) skin = GetSkin("base");
         FactionDefinition faction = SelectedFaction();
+        FactionDefinition opponentFaction = GetFaction(opponentFactionId);
+        if (opponentFaction == null) opponentFaction = GetFaction("blue");
+        if (opponentFaction != null)
+        {
+            battle.ConfigureOpponentFactionModifiers(
+                opponentFaction.attackMultiplier,
+                opponentFaction.maxHPMultiplier,
+                opponentFaction.bulletDefenseMultiplier,
+                opponentFaction.explosionDefenseMultiplier,
+                opponentFaction.movementMultiplier,
+                opponentFaction.productionCostMultiplier);
+        }
         if (skin != null)
         {
             float factionAttack = faction != null ? faction.attackMultiplier : 1f;
