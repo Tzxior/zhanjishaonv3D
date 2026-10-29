@@ -26,10 +26,12 @@ public class HexBattlefieldDemo : MonoBehaviour
     public Color reachableTileColor = new Color(0.18f, 0.78f, 0.88f);
     public Color actionTargetColor = new Color(1f, 0.42f, 0.08f);
     public Color neutralCityColor = new Color(0.75f, 0.69f, 0.42f);
-    public Color blueCityColor = new Color(0.18f, 0.42f, 0.82f);
-    public Color redCityColor = new Color(0.78f, 0.22f, 0.20f);
+    [Header("Faction Colors")]
+    public Color playerFactionColor = new Color(0.86f, 0.16f, 0.21f);
+    public Color opponentFactionColor = new Color(0.16f, 0.39f, 0.86f);
 
     private Mesh hexMesh;
+    private readonly Dictionary<Color, Material> generatedMaterials = new Dictionary<Color, Material>();
     private Camera mainCamera;
     private Vector3 cameraFocus;
     private readonly Dictionary<Collider, TileInfo> tilesByCollider = new Dictionary<Collider, TileInfo>();
@@ -98,8 +100,196 @@ public class HexBattlefieldDemo : MonoBehaviour
             TileInfo info = new TileInfo { q = q, r = r, terrain = terrain, material = material, baseColor = color };
             tilesByCollider[collider] = info;
             tilesByCoordinates[new Vector2Int(q, r)] = info;
+            CreateTerrainVisuals(tile.transform, terrain, shader, q, r);
         }
         Debug.Log($"Hex battlefield ready: {columns} x {rows} = {columns * rows} hexes.");
+    }
+
+    private Material GetOrCreateVisualMaterial(Color color, Shader shader)
+    {
+        if (generatedMaterials.TryGetValue(color, out Material cached) && cached != null)
+            return cached;
+        Material material = new Material(shader) { color = color };
+        generatedMaterials[color] = material;
+        return material;
+    }
+
+    private GameObject AddTerrainPart(Transform parent, PrimitiveType shape, string partName,
+        Vector3 localPosition, Vector3 localScale, Color color, Shader shader, Vector3 localEuler = default)
+    {
+        GameObject part = GameObject.CreatePrimitive(shape);
+        part.name = partName;
+        part.transform.SetParent(parent, false);
+        part.transform.localPosition = localPosition;
+        part.transform.localScale = localScale;
+        part.transform.localEulerAngles = localEuler;
+        Collider collider = part.GetComponent<Collider>();
+        if (collider != null) collider.enabled = false;
+        Renderer renderer = part.GetComponent<Renderer>();
+        if (renderer != null) renderer.sharedMaterial = GetOrCreateVisualMaterial(color, shader);
+        return part;
+    }
+
+    private string TerrainIcon(string terrain)
+    {
+        switch (terrain)
+        {
+            case "Grassland": return "PL";
+            case "Forest": return "FR";
+            case "Hill": return "HL";
+            case "Mountain": return "MT";
+            case "Water": return "WT";
+            case "Road": return "RD";
+            case "MountainRoad": return "MR";
+            case "Dryland": return "DR";
+            case "City": return "CT";
+            default: return "??";
+        }
+    }
+
+    private void CreateTerrainVisuals(Transform tile, string terrain, Shader shader, int q, int r)
+    {
+        float top = tileThickness * 0.5f + 0.012f;
+        float size = hexSize;
+        Color dark = new Color(0.14f, 0.16f, 0.15f);
+        Color stone = new Color(0.42f, 0.44f, 0.45f);
+        Color foliage = new Color(0.08f, 0.25f, 0.13f);
+        Color foliageLight = new Color(0.16f, 0.42f, 0.20f);
+        Color soil = new Color(0.43f, 0.29f, 0.18f);
+        Color paleSoil = new Color(0.72f, 0.58f, 0.36f);
+
+        switch (terrain)
+        {
+            case "Forest":
+                for (int i = 0; i < 3; i++)
+                {
+                    float x = (i - 1) * 0.27f * size;
+                    float z = (i == 1 ? 0.19f : -0.17f) * size;
+                    float height = (i == 1 ? 0.48f : 0.38f) * size;
+                    AddTerrainPart(tile, PrimitiveType.Cylinder, "TreeTrunk",
+                        new Vector3(x, top + height * 0.22f, z), new Vector3(0.065f, height * 0.30f, 0.065f) * size,
+                        soil, shader);
+                    AddTerrainPart(tile, PrimitiveType.Sphere, "TreeCanopy",
+                        new Vector3(x, top + height * 0.68f, z), new Vector3(0.25f, height, 0.23f) * size,
+                        (i == 1 ? foliageLight : foliage), shader);
+                }
+                break;
+
+            case "Hill":
+                AddTerrainPart(tile, PrimitiveType.Sphere, "HillMound",
+                    new Vector3(0f, top + 0.09f * size, 0f), new Vector3(0.78f, 0.22f, 0.66f) * size,
+                    new Color(0.48f, 0.36f, 0.24f), shader);
+                AddTerrainPart(tile, PrimitiveType.Sphere, "HillRidge",
+                    new Vector3(0.08f * size, top + 0.16f * size, 0.02f * size), new Vector3(0.38f, 0.10f, 0.44f) * size,
+                    new Color(0.62f, 0.48f, 0.31f), shader);
+                break;
+
+            case "Mountain":
+                AddTerrainPart(tile, PrimitiveType.Sphere, "MountainPeak",
+                    new Vector3(-0.14f * size, top + 0.26f * size, -0.03f * size),
+                    new Vector3(0.42f, 0.70f, 0.38f) * size, stone, shader, new Vector3(0f, 0f, -12f));
+                AddTerrainPart(tile, PrimitiveType.Sphere, "MountainPeakSmall",
+                    new Vector3(0.22f * size, top + 0.19f * size, 0.17f * size),
+                    new Vector3(0.32f, 0.49f, 0.29f) * size, new Color(0.34f, 0.36f, 0.38f), shader);
+                AddTerrainPart(tile, PrimitiveType.Cube, "RockFace",
+                    new Vector3(-0.16f * size, top + 0.06f * size, 0.10f * size),
+                    new Vector3(0.25f, 0.18f, 0.24f) * size, new Color(0.56f, 0.57f, 0.57f), shader,
+                    new Vector3(0f, 0f, 28f));
+                break;
+
+            case "Water":
+                for (int i = 0; i < 3; i++)
+                    AddTerrainPart(tile, PrimitiveType.Sphere, "WaterRipple",
+                        new Vector3((i - 1) * 0.24f * size, top + 0.012f, (i % 2 == 0 ? 0.13f : -0.12f) * size),
+                        new Vector3(0.38f, 0.025f, 0.07f) * size,
+                        i == 1 ? new Color(0.49f, 0.79f, 0.85f) : new Color(0.25f, 0.56f, 0.69f), shader,
+                        new Vector3(0f, 0f, i == 1 ? 0f : -7f));
+                break;
+
+            case "Road":
+                AddTerrainPart(tile, PrimitiveType.Cube, "RoadSurface",
+                    new Vector3(0f, top + 0.018f, 0f), new Vector3(1.30f, 0.035f, 0.34f) * size,
+                    new Color(0.28f, 0.28f, 0.26f), shader, new Vector3(0f, 0f, 30f));
+                AddTerrainPart(tile, PrimitiveType.Cube, "RoadCenterMark",
+                    new Vector3(0f, top + 0.038f, 0f), new Vector3(0.72f, 0.008f, 0.025f) * size,
+                    new Color(0.79f, 0.73f, 0.54f), shader, new Vector3(0f, 0f, 30f));
+                break;
+
+            case "MountainRoad":
+                AddTerrainPart(tile, PrimitiveType.Cube, "MountainRoadSurface",
+                    new Vector3(0f, top + 0.022f, 0f), new Vector3(1.26f, 0.045f, 0.36f) * size,
+                    new Color(0.35f, 0.29f, 0.23f), shader, new Vector3(0f, 0f, 30f));
+                AddTerrainPart(tile, PrimitiveType.Cube, "MountainRoadStripe",
+                    new Vector3(0f, top + 0.048f, 0f), new Vector3(0.72f, 0.008f, 0.025f) * size,
+                    new Color(0.70f, 0.61f, 0.45f), shader, new Vector3(0f, 0f, 30f));
+                for (int i = 0; i < 2; i++)
+                    AddTerrainPart(tile, PrimitiveType.Sphere, "RoadsideRock",
+                        new Vector3((i == 0 ? -0.34f : 0.34f) * size, top + 0.06f * size, (i == 0 ? 0.25f : -0.25f) * size),
+                        new Vector3(0.17f, 0.12f, 0.15f) * size, stone, shader);
+                break;
+
+            case "Dryland":
+                for (int i = 0; i < 3; i++)
+                    AddTerrainPart(tile, PrimitiveType.Sphere, "DrylandScrub",
+                        new Vector3((i - 1) * 0.29f * size, top + 0.025f, (i % 2 == 0 ? 0.20f : -0.18f) * size),
+                        new Vector3(0.16f, 0.055f, 0.13f) * size, i == 1 ? paleSoil : soil, shader);
+                break;
+
+            case "City":
+                AddTerrainPart(tile, PrimitiveType.Cube, "CityPlaza",
+                    new Vector3(0f, top + 0.015f, 0f), new Vector3(0.88f, 0.035f, 0.76f) * size,
+                    new Color(0.38f, 0.39f, 0.38f), shader);
+                for (int i = 0; i < 3; i++)
+                {
+                    float x = (i - 1) * 0.25f * size;
+                    float h = (i == 1 ? 0.24f : 0.17f) * size;
+                    AddTerrainPart(tile, PrimitiveType.Cube, "CityBlock",
+                        new Vector3(x, top + h * 0.55f, (i % 2 == 0 ? 0.16f : -0.12f) * size),
+                        new Vector3(0.19f, h, 0.20f) * size,
+                        new Color(0.56f, 0.56f, 0.52f), shader);
+                    AddTerrainPart(tile, PrimitiveType.Cube, "CityRoof",
+                        new Vector3(x, top + h + 0.008f, (i % 2 == 0 ? 0.16f : -0.12f) * size),
+                        new Vector3(0.20f, 0.025f, 0.21f) * size,
+                        new Color(0.26f, 0.29f, 0.32f), shader);
+                }
+                break;
+
+            default: // Grassland remains open, with small tufts so it does not look identical to a blank tile.
+                for (int i = 0; i < 2; i++)
+                    AddTerrainPart(tile, PrimitiveType.Cube, "GrassTuft",
+                        new Vector3((i == 0 ? -0.23f : 0.25f) * size, top + 0.025f, (i == 0 ? 0.12f : -0.20f) * size),
+                        new Vector3(0.11f, 0.06f, 0.035f) * size,
+                        new Color(0.20f, 0.39f, 0.20f), shader,
+                        new Vector3(0f, 0f, i == 0 ? 20f : -20f));
+                break;
+        }
+
+        var iconObject = new GameObject($"TerrainIcon_{TerrainIcon(terrain)}_{q}_{r}");
+        iconObject.transform.SetParent(tile, false);
+        iconObject.transform.localPosition = new Vector3(-0.49f * size, tileThickness * 0.5f + 0.022f, 0.37f * size);
+        iconObject.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+        TextMesh icon = iconObject.AddComponent<TextMesh>();
+        icon.text = TerrainIcon(terrain);
+        icon.fontSize = 42;
+        icon.characterSize = 0.12f * size;
+        icon.anchor = TextAnchor.MiddleCenter;
+        icon.alignment = TextAlignment.Center;
+        icon.color = new Color(0.08f, 0.10f, 0.09f, 0.92f);
+    }
+
+    public void SetFactionColors(Color playerColor, Color opponentColor)
+    {
+        playerFactionColor = playerColor;
+        opponentFactionColor = opponentColor;
+        foreach (TileInfo tile in tilesByCoordinates.Values)
+            RefreshTileColor(tile);
+    }
+
+    public Color GetFactionColor(int team)
+    {
+        if (team == 0) return playerFactionColor;
+        if (team == 1) return opponentFactionColor;
+        return neutralCityColor;
     }
 
     private void GetTerrain(int q, int r, out string terrain, out Color color)
@@ -324,7 +514,8 @@ public class HexBattlefieldDemo : MonoBehaviour
         if (tile.isReachable) { tile.material.color = reachableTileColor; return; }
         if (tile.isActionTarget) { tile.material.color = actionTargetColor; return; }
         if (tile.terrain == "City")
-            tile.material.color = tile.ownerTeam == 0 ? blueCityColor : tile.ownerTeam == 1 ? redCityColor : neutralCityColor;
+            tile.material.color = tile.ownerTeam == 0 ? playerFactionColor :
+                                  tile.ownerTeam == 1 ? opponentFactionColor : neutralCityColor;
         else tile.material.color = tile.baseColor;
     }
 
