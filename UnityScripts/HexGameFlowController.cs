@@ -122,6 +122,7 @@ public class HexGameFlowController : MonoBehaviour
     private readonly HashSet<string> unlockedSkinIds = new HashSet<string>();
     private string selectedSkinId = "base";
     private string selectedFactionId = "red";
+    private int selectedLevelIndex;
     private Vector2 unitScroll;
     private Vector2 skinScroll;
     private float masterVolume = 1f;
@@ -354,6 +355,11 @@ public class HexGameFlowController : MonoBehaviour
         if (battle != null) battle.SetGameplayPaused(true);
     }
 
+    private string CurrentLevelName()
+    {
+        return selectedLevelIndex <= 0 ? "Test001" : "Test002";
+    }
+
     private void StartTest001()
     {
         SkinDefinition skin = GetSkin(selectedSkinId);
@@ -388,6 +394,7 @@ public class HexGameFlowController : MonoBehaviour
                 skin.productionCostMultiplier * factionProductionCost);
         }
         ApplyCurrentFactionColors();
+        battle.ConfigureLevel(selectedLevelIndex);
         battle.ResetForNewMatch();
         if (skinChests != null)
         {
@@ -531,12 +538,23 @@ public class HexGameFlowController : MonoBehaviour
         GUILayout.Space(8);
         GUILayout.BeginVertical(GUI.skin.box);
         GUILayout.Label("Test001");
-        GUILayout.Label("当前可用测试关卡：六角格战场、建筑占领、资源和生产原型。");
-        if (GUILayout.Button("选择 Test001", GUILayout.Height(42))) screen = ScreenState.SkinSelect;
+        GUILayout.Label("9×9 六角格地图；基础行动、占领、资源与生产原型。");
+        if (GUILayout.Button("选择 Test001", GUILayout.Height(42)))
+        {
+            selectedLevelIndex = 0;
+            screen = ScreenState.SkinSelect;
+        }
         GUILayout.EndVertical();
-        GUI.enabled = false;
-        GUILayout.Button("更多关卡（尚未配置）", GUILayout.Height(36));
-        GUI.enabled = true;
+
+        GUILayout.BeginVertical(GUI.skin.box);
+        GUILayout.Label("Test002：多兵种联合战场");
+        GUILayout.Label("11×11 扩展地图；双方各 13 支混合兵种部队，增加海岸、水域、工厂和资源点。");
+        if (GUILayout.Button("选择 Test002", GUILayout.Height(42)))
+        {
+            selectedLevelIndex = 1;
+            screen = ScreenState.SkinSelect;
+        }
+        GUILayout.EndVertical();
         GUILayout.FlexibleSpace();
         if (GUILayout.Button("返回主菜单")) screen = ScreenState.MainMenu;
     }
@@ -583,7 +601,7 @@ public class HexGameFlowController : MonoBehaviour
 
         GUILayout.EndScrollView();
 
-        if (GUILayout.Button("开始 Test001", GUILayout.Height(42f))) StartTest001();
+        if (GUILayout.Button("开始 " + CurrentLevelName(), GUILayout.Height(42f))) StartTest001();
         if (GUILayout.Button("返回选关")) screen = ScreenState.LevelSelect;
     }
 
@@ -662,7 +680,7 @@ public class HexGameFlowController : MonoBehaviour
     private void DrawPause()
     {
         GUILayout.Label("战场菜单", TitleStyle());
-        GUILayout.Label("Test001");
+        GUILayout.Label(CurrentLevelName());
         GUILayout.Space(12);
         if (GUILayout.Button("继续游戏", GUILayout.Height(40f))) ResumeBattle();
         if (GUILayout.Button("重新开始本关", GUILayout.Height(38f))) StartTest001();
@@ -697,7 +715,7 @@ public class HexGameFlowController : MonoBehaviour
         GUILayout.Label("当前皮肤：" + SelectedSkinName());
         if (!string.IsNullOrEmpty(notice)) GUILayout.Label(notice);
         GUILayout.FlexibleSpace();
-        if (GUILayout.Button("重玩 Test001", GUILayout.Height(42f))) StartTest001();
+        if (GUILayout.Button("重玩当前关卡：" + CurrentLevelName(), GUILayout.Height(42f))) StartTest001();
         if (GUILayout.Button("返回主菜单", GUILayout.Height(38f))) ReturnToMainMenu();
     }
 }
