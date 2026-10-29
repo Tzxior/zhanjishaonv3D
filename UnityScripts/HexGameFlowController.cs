@@ -71,6 +71,42 @@ public class HexGameFlowController : MonoBehaviour
     private string notice = "";
     private bool initialized;
 
+    private bool UsesFrontEndBackdrop()
+    {
+        if (screen == ScreenState.MainMenu || screen == ScreenState.LevelSelect ||
+            screen == ScreenState.SkinSelect || screen == ScreenState.UnitCodex ||
+            screen == ScreenState.SkinCodex)
+            return true;
+
+        if (screen == ScreenState.Settings)
+            return settingsReturnScreen == ScreenState.MainMenu ||
+                   settingsReturnScreen == ScreenState.LevelSelect ||
+                   settingsReturnScreen == ScreenState.SkinSelect ||
+                   settingsReturnScreen == ScreenState.UnitCodex ||
+                   settingsReturnScreen == ScreenState.SkinCodex;
+
+        return false;
+    }
+
+    private void DrawFrontEndBackdrop()
+    {
+        Color previous = GUI.color;
+        // Opaque abstract backdrop; it hides the live Test001 map while in front-end menus.
+        GUI.color = new Color(0.025f, 0.04f, 0.075f, 1f);
+        GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), Texture2D.whiteTexture);
+
+        GUI.color = new Color(0.12f, 0.20f, 0.31f, 0.45f);
+        for (int x = -Screen.height; x < Screen.width; x += 110)
+            GUI.DrawTexture(new Rect(x, 0f, 1f, Screen.height), Texture2D.whiteTexture);
+        for (int y = 48; y < Screen.height; y += 72)
+            GUI.DrawTexture(new Rect(0f, y, Screen.width, 1f), Texture2D.whiteTexture);
+
+        GUI.color = new Color(0.15f, 0.25f, 0.38f, 0.20f);
+        GUI.DrawTexture(new Rect(0f, Screen.height * 0.72f, Screen.width, Screen.height * 0.28f), Texture2D.whiteTexture);
+        GUI.DrawTexture(new Rect(Screen.width * 0.72f, 0f, Screen.width * 0.28f, Screen.height), Texture2D.whiteTexture);
+        GUI.color = previous;
+    }
+
     private void Start()
     {
         if (battle == null) battle = GetComponent<HexUnitDemo>();
@@ -273,6 +309,9 @@ public class HexGameFlowController : MonoBehaviour
 
     private void OnGUI()
     {
+        if (UsesFrontEndBackdrop())
+            DrawFrontEndBackdrop();
+
         if (screen == ScreenState.Battle || screen == ScreenState.Settings)
         {
             if (screen == ScreenState.Settings) DrawPanel();
