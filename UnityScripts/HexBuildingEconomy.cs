@@ -98,7 +98,7 @@ public class HexBuildingEconomy : MonoBehaviour
     [Min(0)] public int startingLabour = 2;
 
     [Header("Unit production data")]
-    [Tooltip("Unit costs and manufacturing times were not specified yet. Add entries here; empty profiles are not producible.")]
+    [Tooltip("留空时自动从 Resources/GadgetUnitProfiles.json 读取单位造价与生产时间；填写后以 Inspector 中的自定义配置为准。")]
     public UnitProductionProfile[] productionProfiles = new UnitProductionProfile[0];
 
     private readonly List<BuildingState> buildings = new List<BuildingState>();
