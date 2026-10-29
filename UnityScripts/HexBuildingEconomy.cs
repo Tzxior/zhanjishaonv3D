@@ -390,12 +390,12 @@ public class HexBuildingEconomy : MonoBehaviour
     public int GetLabourAvailable(int team)
     {
         TeamWallet wallet = EnsureWallet(team);
-        return wallet.labour - wallet.reservedLabour;
+        return Mathf.Max(0, wallet.labour - wallet.reservedLabour);
     }
     public int GetIronCapacity(int team) => CountOwned(team, HexBuildingType.IronMine);
     public int GetAluminiumCapacity(int team) => CountOwned(team, HexBuildingType.AluminiumMine);
-    public int GetIronAvailable(int team) => GetIronCapacity(team) - EnsureWallet(team).reservedIron;
-    public int GetAluminiumAvailable(int team) => GetAluminiumCapacity(team) - EnsureWallet(team).reservedAluminium;
+    public int GetIronAvailable(int team) => Mathf.Max(0, GetIronCapacity(team) - EnsureWallet(team).reservedIron);
+    public int GetAluminiumAvailable(int team) => Mathf.Max(0, GetAluminiumCapacity(team) - EnsureWallet(team).reservedAluminium);
 
     public string GetResourceSummary(int team)
     {
