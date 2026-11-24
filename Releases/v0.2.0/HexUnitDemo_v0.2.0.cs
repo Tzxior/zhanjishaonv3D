@@ -317,8 +317,6 @@ public class HexUnitDemo : MonoBehaviour
             foreach(UnitInfo observer in units)
             {
                 if(observer.team != 0 || observer.reconRange < 0 || target.concealment < 0) continue;
-                // Hidden spies can only be revealed by units explicitly marked as spy detectors.
-                if(target.unitId == "spy" && !observer.canDetectSpy) continue;
                 if(observer.reconRange < target.concealment) continue;
                 int distance = HexDistance(new Vector2Int(observer.q, observer.r), new Vector2Int(target.q, target.r));
                 if(distance <= observer.reconRange) { detected = true; break; }
