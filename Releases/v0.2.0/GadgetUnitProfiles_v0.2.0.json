@@ -905,7 +905,7 @@
     },
     {
       "id": "submersible",
-      "unitName": "潜航（上浮形态）",
+      "unitName": "潜航",
       "unitCategory": "naval",
       "unitClass": 3,
       "maxHP": 180,
