@@ -815,7 +815,7 @@
       "specialAbilities": [
         "空中侦察"
       ],
-      "reconRange": 10,
+      "reconRange": 6,
       "concealment": 0,
       "canDetectSpy": false,
       "resourceCapacity": 0,
