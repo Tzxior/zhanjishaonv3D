@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 5,
-  "notes": "Based on user-provided 单位信息.csv, not verified original-game official data. v0.2.0 implements configurable attack actions, ammo inventory use, support/healing, fuel/ammo resupply, transport loading/unloading, and fortress stance. Temporary rules and unimplemented powers are documented in Releases/v0.2.0/README_v0.2.0.md. Detection requires observer.reconRange >= target.concealment and distance <= reconRange.",
+  "schemaVersion": 6,
+  "notes": "Based on user-provided 单位信息.csv, not verified original-game official data. v0.2.0 data patch: the former refuel_aircraft profile is replaced by recon_plane; a submersible unit profile is added with surfaced carrier and submerged non-attacking submarine forms. The form profiles are configuration data; mode switching, mode-specific runtime stats, and related UI/AI behavior still require implementation in HexUnitDemo. Other v0.2.0 behavior and known gaps remain documented in Releases/v0.2.0/README_v0.2.0.md. Detection requires observer.reconRange >= target.concealment and distance <= reconRange; canDetectSpy is intended to gate spy detection.",
   "units": [
     {
       "id": "infantry",
@@ -793,8 +793,8 @@
       ]
     },
     {
-      "id": "refuel_aircraft",
-      "unitName": "加油机",
+      "id": "recon_plane",
+      "unitName": "侦察机",
       "unitCategory": "air",
       "unitClass": 2,
       "maxHP": 80,
@@ -811,21 +811,18 @@
       "canCapture": false,
       "ammoCapacity": 0,
       "fuelCapacity": 30,
-      "description": "为友方飞机补充燃料；无法攻击。",
+      "description": "高速空中侦察单位，拥有较大的侦察范围；无法攻击、占领或为其他单位补充燃料。",
       "specialAbilities": [
-        "空中加油"
+        "空中侦察"
       ],
-      "reconRange": 6,
+      "reconRange": 10,
       "concealment": 0,
       "canDetectSpy": false,
       "resourceCapacity": 0,
-      "dataGaps": [],
-      "actions": [
-        {
-          "id": "action_1",
-          "description": "空中加油：指定单位 +5 燃料，80 AP"
-        }
-      ]
+      "dataGaps": [
+        "侦察范围内的迷雾揭露、情报共享及持续时间规则待接入战场系统"
+      ],
+      "actions": []
     },
     {
       "id": "torpedo_plane",
@@ -905,6 +902,130 @@
           "description": "补充指定单位 5 点燃料，80 AP"
         }
       ]
+    },
+    {
+      "id": "submersible",
+      "unitName": "潜航（上浮形态）",
+      "unitCategory": "naval",
+      "unitClass": 3,
+      "maxHP": 180,
+      "attackPower": 0,
+      "attackType": 0,
+      "bulletDefense": 40,
+      "explosionDefense": 20,
+      "movementPower": 5,
+      "movementAPLimit": 100,
+      "attackAP": 0,
+      "captureAP": 0,
+      "restAP": 0,
+      "attackRange": 1,
+      "canCapture": false,
+      "ammoCapacity": 0,
+      "fuelCapacity": 50,
+      "description": "上浮形态，相当于航母；可停靠舰载机并提供舰载机补给，自身无法攻击。",
+      "specialAbilities": [
+        "舰载机停靠与补给",
+        "上浮/下沉形态切换"
+      ],
+      "reconRange": 6,
+      "concealment": 0,
+      "canDetectSpy": false,
+      "resourceCapacity": 0,
+      "actions": [
+        {
+          "id": "action_1",
+          "description": "舰载机停靠与补给：容量、起降及补给费用待定义"
+        },
+        {
+          "id": "action_2",
+          "description": "切换至下沉形态：AP 成本待定义"
+        }
+      ],
+      "dataGaps": [
+        "上浮/下沉形态切换 AP 成本待定义",
+        "切换形态时当前生命值如何换算待定义",
+        "舰载机停靠容量、起降限制与补给弹药规则待定义",
+        "下沉形态反潜命中判定须由战场系统落实"
+      ],
+      "modeSwitch": {
+        "defaultMode": "surface",
+        "switchAP": null,
+        "implementationStatus": "profile_only",
+        "modes": {
+          "surface": {
+            "unitName": "潜航（上浮形态）",
+            "maxHP": 180,
+            "attackPower": 0,
+            "attackType": 0,
+            "bulletDefense": 40,
+            "explosionDefense": 20,
+            "movementPower": 5,
+            "movementAPLimit": 100,
+            "attackAP": 0,
+            "captureAP": 0,
+            "restAP": 0,
+            "attackRange": 1,
+            "canCapture": false,
+            "ammoCapacity": 0,
+            "fuelCapacity": 50,
+            "description": "上浮形态，相当于航母；可停靠舰载机并提供舰载机补给，自身无法攻击。",
+            "specialAbilities": [
+              "舰载机停靠与补给",
+              "上浮/下沉形态切换"
+            ],
+            "reconRange": 6,
+            "concealment": 0,
+            "canDetectSpy": false,
+            "resourceCapacity": 0,
+            "actions": [
+              {
+                "id": "action_1",
+                "description": "舰载机停靠与补给：容量、起降及补给费用待定义"
+              },
+              {
+                "id": "action_2",
+                "description": "切换至下沉形态：AP 成本待定义"
+              }
+            ]
+          },
+          "submerged": {
+            "unitName": "潜航（下沉形态）",
+            "maxHP": 80,
+            "attackPower": 0,
+            "attackType": 1,
+            "bulletDefense": 20,
+            "explosionDefense": 20,
+            "movementPower": 4,
+            "movementAPLimit": 100,
+            "attackAP": 0,
+            "captureAP": 0,
+            "restAP": 0,
+            "attackRange": 0,
+            "canCapture": false,
+            "ammoCapacity": 0,
+            "fuelCapacity": 20,
+            "description": "下沉形态，相当于不能攻击的潜艇；仅驱逐舰、巡洋舰和鱼雷机等指定反潜单位能够命中。",
+            "specialAbilities": [
+              "潜航隐蔽",
+              "上浮/下沉形态切换"
+            ],
+            "reconRange": 2,
+            "concealment": 4,
+            "canDetectSpy": false,
+            "resourceCapacity": 0,
+            "actions": [
+              {
+                "id": "action_1",
+                "description": "下沉形态不能发动攻击"
+              },
+              {
+                "id": "action_2",
+                "description": "切换至上浮形态：AP 成本待定义"
+              }
+            ]
+          }
+        }
+      }
     },
     {
       "id": "destroyer",
