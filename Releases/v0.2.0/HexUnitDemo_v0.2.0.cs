@@ -317,6 +317,8 @@ public class HexUnitDemo : MonoBehaviour
             foreach(UnitInfo observer in units)
             {
                 if(observer.team != 0 || observer.reconRange < 0 || target.concealment < 0) continue;
+                // Hidden spies can only be revealed by units explicitly marked as spy detectors.
+                if(target.unitId == "spy" && !observer.canDetectSpy) continue;
                 if(observer.reconRange < target.concealment) continue;
                 int distance = HexDistance(new Vector2Int(observer.q, observer.r), new Vector2Int(target.q, target.r));
                 if(distance <= observer.reconRange) { detected = true; break; }
@@ -1132,7 +1134,7 @@ public class HexUnitDemo : MonoBehaviour
         { if(GUILayout.Button("治疗友军（恢复损血的50%，100 AP）")) BeginSupportMode("heal"); if(GUILayout.Button("鼓舞友军（等待AP减半，80 AP）")) BeginSupportMode("inspire"); }
         if(selectedUnit.unitId=="apc"||selectedUnit.unitId=="transport_ship")
         { if(selectedUnit.currentFuel>=5&&GUILayout.Button("补给燃料 +5（80 AP）")) BeginSupportMode("fuel"); if(selectedUnit.currentAmmo>=2&&GUILayout.Button("补给弹药 +2（80 AP）")) BeginSupportMode("ammo"); }
-        if((selectedUnit.unitId=="refuel_aircraft"||selectedUnit.unitId=="aircraft_carrier")&&selectedUnit.currentFuel>=5&&GUILayout.Button("加油 +5（80 AP）")) BeginSupportMode("fuel");
+        if(selectedUnit.unitId=="aircraft_carrier"&&selectedUnit.currentFuel>=5&&GUILayout.Button("加油 +5（80 AP）")) BeginSupportMode("fuel");
     }
     private void BeginSupportMode(string action) { supportAction=action; supportMode=true; attackMode=false; transportMode=false; moveMode=false; ClearHighlights(); statusMessage="支援模式："+action+"。点击相邻友军。"; }
     private void ExecuteSupportAction(UnitInfo target)
